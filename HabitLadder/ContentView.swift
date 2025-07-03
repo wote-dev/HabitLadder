@@ -12,241 +12,355 @@ import Foundation
 struct OnboardingView: View {
     @State private var currentPage = 0
     @State private var isAnimating = false
+    @State private var backgroundGradientAnimation = false
+    @State private var selectedProfile: HabitProfile?
+    @State private var showWalkthrough = false
+    @EnvironmentObject var storeManager: StoreManager
+    @EnvironmentObject var habitManager: HabitManager
+    
     let onComplete: () -> Void
     
-    private let pages = [
-        OnboardingPage(
-            title: "Welcome to HabitLadder",
-            subtitle: "Your Journey to Better Habits Starts Here",
-            description: "Build lasting habits step by step with our unique ladder system. Each habit unlocks the next, creating a natural progression toward your goals.",
-            icon: "ladder.horizontal",
-            primaryColor: HabitTheme.primary,
-            features: [
-                "Progressive habit building",
-                "Streak tracking system",
-                "Visual progress indicators"
-            ]
-        ),
-        OnboardingPage(
-            title: "The Ladder System",
-            subtitle: "One Step at a Time",
-            description: "Complete habits 3 days in a row to unlock the next level. This proven approach prevents overwhelm and builds sustainable momentum.",
-            icon: "arrow.up.circle.fill",
-            primaryColor: HabitTheme.success,
-            features: [
-                "Complete 3 consecutive days",
-                "Unlock the next habit",
-                "Build unstoppable momentum"
-            ]
-        ),
-        OnboardingPage(
-            title: "Track Your Progress",
-            subtitle: "See Your Success",
-            description: "Visual streaks, completion badges, and progress indicators keep you motivated. Celebrate every milestone on your journey.",
-            icon: "chart.line.uptrend.xyaxis",
-            primaryColor: HabitTheme.accent,
-            features: [
-                "Daily completion tracking",
-                "Streak visualization",
-                "Achievement celebrations"
-            ]
-        ),
-        OnboardingPage(
-            title: "Start Your Journey",
-            subtitle: "Ready to Transform Your Life?",
-            description: "Create your first habit and begin climbing your personal ladder to success. Small steps lead to big changes.",
-            icon: "flag.checkered.circle.fill",
-            primaryColor: HabitTheme.primary,
-            features: [
-                "Add your first habit",
-                "Set daily reminders",
-                "Watch your progress grow"
-            ]
-        )
+    private let freeProfiles: [HabitProfile] = [
+        HabitProfile(type: .basicWellness, habits: [
+            Habit(name: "Drink water upon waking", description: "Start your day hydrated"),
+            Habit(name: "Take 3 deep breaths", description: "Center yourself for the day"),
+            Habit(name: "Eat one piece of fruit", description: "Get essential vitamins"),
+            Habit(name: "Step outside for 2 minutes", description: "Connect with nature"),
+            Habit(name: "Express gratitude", description: "End your day positively")
+        ]),
+        HabitProfile(type: .morningStarter, habits: [
+            Habit(name: "Make your bed", description: "Start with a small win"),
+            Habit(name: "Drink a glass of water", description: "Rehydrate after sleep"),
+            Habit(name: "Write 3 priorities", description: "Focus your day"),
+            Habit(name: "Do 5 jumping jacks", description: "Wake up your body"),
+            Habit(name: "Read for 5 minutes", description: "Feed your mind")
+        ]),
+        HabitProfile(type: .focusEssentials, habits: [
+            Habit(name: "Clear your workspace", description: "Start with a clean environment"),
+            Habit(name: "Set a 25-minute timer", description: "Use the Pomodoro technique"),
+            Habit(name: "Turn off notifications", description: "Eliminate distractions"),
+            Habit(name: "Take a 5-minute break", description: "Rest between focus sessions"),
+            Habit(name: "Review what you accomplished", description: "Celebrate your progress")
+        ]),
+        HabitProfile(type: .sleepHygiene, habits: [
+            Habit(name: "Set phone to Do Not Disturb", description: "Prepare for rest"),
+            Habit(name: "Dim the lights 1 hour before bed", description: "Signal your body it's bedtime"),
+            Habit(name: "Write tomorrow's top 3 tasks", description: "Clear your mind"),
+            Habit(name: "Do gentle stretches", description: "Relax your body"),
+            Habit(name: "Practice gratitude", description: "End with positive thoughts")
+        ])
     ]
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Gradient background
+                // Gradient background with subtle animation
                 LinearGradient(
                     colors: [
                         HabitTheme.backgroundPrimary,
-                        HabitTheme.backgroundSecondary
+                        HabitTheme.backgroundSecondary,
+                        currentPage == 0 ? HabitTheme.primary.opacity(0.05) : 
+                        (currentPage == 1 ? HabitTheme.accent.opacity(0.05) : HabitTheme.success.opacity(0.05))
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    startPoint: backgroundGradientAnimation ? .topTrailing : .topLeading,
+                    endPoint: backgroundGradientAnimation ? .bottomLeading : .bottomTrailing
                 )
                 .ignoresSafeArea()
+                .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: backgroundGradientAnimation)
                 
-                VStack(spacing: 0) {
-                    // Skip button
-                    HStack {
-                        Spacer()
-                        Button("Skip") {
-                            onComplete()
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(HabitTheme.secondaryText)
-                        .padding()
-                    }
-                    
-                    // Page content
-                    TabView(selection: $currentPage) {
-                        ForEach(0..<pages.count, id: \.self) { index in
-                            OnboardingPageView(
-                                page: pages[index],
-                                geometry: geometry,
-                                isActive: currentPage == index
-                            )
-                            .tag(index)
-                        }
-                    }
-                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: currentPage)
-                    
-                    // Bottom controls - Fixed at bottom
-                    VStack(spacing: 20) {
-                        // Page indicators
-                        HStack(spacing: 8) {
-                            ForEach(0..<pages.count, id: \.self) { index in
-                                Circle()
-                                    .fill(currentPage == index ? pages[currentPage].primaryColor : HabitTheme.inactive)
-                                    .frame(width: currentPage == index ? 12 : 8, height: currentPage == index ? 12 : 8)
-                                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: currentPage)
+                if showWalkthrough {
+                    FirstHabitWalkthroughView(
+                        selectedProfile: selectedProfile!,
+                        onComplete: {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                showWalkthrough = false
+                                onComplete()
                             }
                         }
-                        .padding(.bottom, 8)
+                    )
+                    .transition(.move(edge: .trailing))
+                } else {
+                    VStack(spacing: 0) {
+                        // Skip button
+                        HStack {
+                            Spacer()
+                            Button("Skip") {
+                                onComplete()
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(Color.secondary)
+                            .padding()
+                        }
                         
-                        // Action buttons
-                        HStack(spacing: 16) {
-                            if currentPage > 0 {
-                                Button("Previous") {
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                        currentPage -= 1
-                                    }
+                        // Page content
+                        TabView(selection: $currentPage) {
+                            // Screen 1: Welcome + Ladder Concept
+                            WelcomeLadderView(geometry: geometry, isActive: currentPage == 0)
+                                .tag(0)
+                            
+                            // Screen 2: Choose Starter Profile
+                            ProfileSelectionView(
+                                geometry: geometry,
+                                isActive: currentPage == 1,
+                                selectedProfile: $selectedProfile,
+                                profiles: freeProfiles
+                            )
+                            .tag(1)
+                        }
+                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                        .animation(.spring(response: 0.6, dampingFraction: 0.85, blendDuration: 0.2), value: currentPage)
+                        
+                        // Page indicators and controls
+                        VStack(spacing: 20) {
+                            // Page indicators
+                            HStack(spacing: 8) {
+                                ForEach(0..<2, id: \.self) { index in
+                                    Circle()
+                                        .fill(currentPage == index ? HabitTheme.primary : HabitTheme.inactive.opacity(0.5))
+                                        .frame(width: 8, height: 8)
+                                        .scaleEffect(currentPage == index ? 1.2 : 1.0)
+                                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: currentPage)
                                 }
-                                .font(.headline)
-                                .foregroundColor(HabitTheme.secondaryText)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(HabitTheme.inactive, lineWidth: 2)
-                                        .fill(.clear)
-                                )
                             }
                             
-                            Button(currentPage == pages.count - 1 ? "Get Started" : "Next") {
-                                // Trigger animation
-                                isAnimating = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    isAnimating = false
+                            // Navigation buttons
+                            HStack(spacing: 16) {
+                                if currentPage > 0 {
+                                    Button("Previous") {
+                                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                            currentPage -= 1
+                                        }
+                                    }
+                                    .font(.headline)
+                                    .foregroundColor(Color.primary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(HabitTheme.inactive.opacity(0.6), lineWidth: 1.5)
+                                            .fill(HabitTheme.cardBackground.opacity(0.8))
+                                    )
                                 }
                                 
-                                // Handle navigation
-                                if currentPage == pages.count - 1 {
-                                    onComplete()
-                                } else {
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                        currentPage += 1
-                                    }
+                                Button(getButtonText()) {
+                                    handleButtonTap()
                                 }
+                                .font(.headline)
+                                .foregroundColor(buttonTextColor())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(buttonBackground())
+                                .cornerRadius(16)
+                                .scaleEffect(isAnimating ? 0.95 : 1.0)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isAnimating)
+                                .disabled(currentPage == 1 && selectedProfile == nil)
                             }
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(pages[currentPage].primaryColor)
-                                    .shadow(
-                                        color: pages[currentPage].primaryColor.opacity(0.3),
-                                        radius: 8,
-                                        x: 0,
-                                        y: 4
-                                    )
-                            )
-                            .scaleEffect(isAnimating ? 0.95 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAnimating)
+                            .padding(.horizontal, 20)
                         }
-                        .padding(.horizontal, 24)
+                        .padding(.bottom, max(20, geometry.safeAreaInsets.bottom))
                     }
-                    .padding(.bottom, max(32, geometry.safeAreaInsets.bottom + 16))
                 }
             }
         }
+        .onAppear {
+            backgroundGradientAnimation = true
+        }
+    }
+    
+    private func getButtonText() -> String {
+        switch currentPage {
+        case 0: return "Next"
+        case 1: return selectedProfile != nil ? "Start Tutorial" : "Choose a Profile"
+        default: return "Get Started"
+        }
+    }
+    
+    private func handleButtonTap() {
+        isAnimating = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            isAnimating = false
+        }
+        
+        switch currentPage {
+        case 0:
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                currentPage = 1
+            }
+        case 1:
+            if let profile = selectedProfile {
+                // Activate the selected profile
+                habitManager.activateHabitProfile(profile)
+                
+                // Wait a moment for profile activation to complete, then start walkthrough
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showWalkthrough = true
+                    }
+                }
+            }
+        default:
+            onComplete()
+        }
+    }
+    
+    private func buttonTextColor() -> Color {
+        if currentPage == 1 && selectedProfile == nil {
+            return HabitTheme.secondaryText
+        }
+        return .white
+    }
+    
+    private func buttonBackground() -> AnyShapeStyle {
+        if currentPage == 1 && selectedProfile == nil {
+            return AnyShapeStyle(HabitTheme.inactive.opacity(0.3))
+        }
+        
+        let color = currentPage == 0 ? HabitTheme.primary : 
+                   (selectedProfile?.gradientColors.first ?? HabitTheme.accent)
+        
+        return AnyShapeStyle(LinearGradient(
+            colors: [color, color.opacity(0.8)],
+            startPoint: .leading,
+            endPoint: .trailing
+        ))
     }
 }
 
-struct OnboardingPage {
-    let title: String
-    let subtitle: String
-    let description: String
-    let icon: String
-    let primaryColor: Color
-    let features: [String]
-}
-
-struct OnboardingPageView: View {
-    let page: OnboardingPage
+// MARK: - Welcome + Ladder Concept View
+struct WelcomeLadderView: View {
     let geometry: GeometryProxy
     let isActive: Bool
     
     @State private var iconScale: CGFloat = 0.8
     @State private var contentOffset: CGFloat = 50
     @State private var contentOpacity: Double = 0
+    @State private var ladderAnimationOffset: CGFloat = 20
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 24) {
+            VStack(spacing: 32) {
                 Spacer(minLength: 40)
                 
-                // Icon
-                VStack(spacing: 20) {
-                    Image(systemName: page.icon)
-                        .font(.system(size: 70, weight: .light))
-                        .foregroundColor(page.primaryColor)
+                // App Icon with animation
+                VStack(spacing: 24) {
+                    Image("SplashIcon")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 80, height: 80)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(
+                            color: HabitTheme.primary.opacity(0.3),
+                            radius: 12,
+                            x: 0,
+                            y: 6
+                        )
                         .scaleEffect(iconScale)
                         .animation(.spring(response: 0.8, dampingFraction: 0.6), value: iconScale)
-                    
-                    VStack(spacing: 8) {
-                        Text(page.title)
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(HabitTheme.primaryText)
-                            .multilineTextAlignment(.center)
-                        
-                        Text(page.subtitle)
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundColor(page.primaryColor)
-                            .multilineTextAlignment(.center)
-                    }
                 }
-                .offset(y: contentOffset)
-                .opacity(contentOpacity)
                 
-                // Description
-                Text(page.description)
-                    .font(.body)
-                    .foregroundColor(HabitTheme.secondaryText)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(nil)
-                    .padding(.horizontal, 24)
-                    .offset(y: contentOffset)
-                    .opacity(contentOpacity)
-                
-                // Features
+                // Title and subtitle
                 VStack(spacing: 12) {
-                    ForEach(Array(page.features.enumerated()), id: \.offset) { index, feature in
+                    Text("Welcome to HabitLadder")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(HabitTheme.primaryText)
+                        .multilineTextAlignment(.center)
+                        .offset(y: contentOffset)
+                        .opacity(contentOpacity)
+                    
+                    Text("Build Better Habits, One Step at a Time")
+                        .font(.title2)
+                        .foregroundColor(HabitTheme.accent)
+                        .multilineTextAlignment(.center)
+                        .offset(y: contentOffset)
+                        .opacity(contentOpacity)
+                }
+                
+                // Ladder concept visualization
+                VStack(spacing: 16) {
+                    Text("The Ladder System")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HabitTheme.primaryText)
+                        .offset(y: contentOffset)
+                        .opacity(contentOpacity)
+                    
+                    // Visual ladder representation
+                    VStack(spacing: 8) {
+                        ForEach(0..<3, id: \.self) { index in
+                            HStack(spacing: 12) {
+                                // Step number
+                                ZStack {
+                                    Circle()
+                                        .fill(index == 0 ? HabitTheme.success : 
+                                             (index == 1 ? HabitTheme.warning : HabitTheme.inactive))
+                                        .frame(width: 32, height: 32)
+                                    
+                                    Text("\(index + 1)")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                }
+                                
+                                // Step description
+                                VStack(alignment: .leading, spacing: 2) {
+                                    let titles = ["Complete for 3 days", "Unlock next habit", "Build momentum"]
+                                    let descriptions = ["Build consistency", "Progress naturally", "Transform your life"]
+                                    
+                                    Text(titles[index])
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(HabitTheme.primaryText)
+                                    
+                                    Text(descriptions[index])
+                                        .font(.caption)
+                                        .foregroundColor(HabitTheme.secondaryText)
+                                }
+                                
+                                Spacer()
+                                
+                                // Arrow for all but last
+                                if index < 2 {
+                                    Image(systemName: "arrow.down")
+                                        .font(.caption)
+                                        .foregroundColor(HabitTheme.accent)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .offset(y: ladderAnimationOffset)
+                            .opacity(contentOpacity)
+                            .animation(
+                                .spring(response: 0.6, dampingFraction: 0.8)
+                                .delay(Double(index) * 0.2),
+                                value: contentOpacity
+                            )
+                        }
+                    }
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(HabitTheme.cardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(HabitTheme.primary.opacity(0.2), lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, 20)
+                }
+                
+                // Key benefits
+                VStack(spacing: 12) {
+                    ForEach(Array([
+                        ("arrow.up.circle.fill", "Progressive building prevents overwhelm"),
+                        ("chart.line.uptrend.xyaxis", "Visual progress keeps you motivated"),
+                        ("sparkles", "Celebrations make habits enjoyable")
+                    ].enumerated()), id: \.offset) { index, item in
                         HStack(spacing: 12) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(page.primaryColor)
+                            Image(systemName: item.0)
+                                .foregroundColor(HabitTheme.primary)
                                 .font(.system(size: 16, weight: .medium))
                             
-                            Text(feature)
+                            Text(item.1)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundColor(HabitTheme.primaryText)
@@ -257,53 +371,617 @@ struct OnboardingPageView: View {
                         .offset(y: contentOffset)
                         .opacity(contentOpacity)
                         .animation(
+                            .spring(response: 0.5, dampingFraction: 0.85)
+                            .delay(Double(index) * 0.1 + 0.6),
+                            value: contentOpacity
+                        )
+                    }
+                }
+                
+                Spacer(minLength: 100)
+            }
+        }
+        .onAppear {
+            if isActive {
+                startAnimations()
+            }
+        }
+        .onChange(of: isActive) { _, newValue in
+            if newValue {
+                startAnimations()
+            }
+        }
+    }
+    
+    private func startAnimations() {
+        // Icon animation
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.6).delay(0.2)) {
+            iconScale = 1.0
+        }
+        
+        // Content animation
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.4)) {
+            contentOffset = 0
+            contentOpacity = 1.0
+        }
+        
+        // Ladder animation
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.8)) {
+            ladderAnimationOffset = 0
+        }
+    }
+}
+
+// MARK: - Profile Selection View
+struct ProfileSelectionView: View {
+    let geometry: GeometryProxy
+    let isActive: Bool
+    @Binding var selectedProfile: HabitProfile?
+    let profiles: [HabitProfile]
+    
+    @State private var contentOffset: CGFloat = 50
+    @State private var contentOpacity: Double = 0
+    
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 32) {
+                Spacer(minLength: 40)
+                
+                // Header
+                VStack(spacing: 16) {
+                    Text("Choose Your Starting Path")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(HabitTheme.primaryText)
+                        .multilineTextAlignment(.center)
+                        .offset(y: contentOffset)
+                        .opacity(contentOpacity)
+                    
+                    Text("Pick a curated set of habits designed for your lifestyle")
+                        .font(.body)
+                        .foregroundColor(HabitTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                        .offset(y: contentOffset)
+                        .opacity(contentOpacity)
+                }
+                
+                // Profile cards
+                LazyVStack(spacing: 16) {
+                    ForEach(Array(profiles.enumerated()), id: \.element.id) { index, profile in
+                        OnboardingProfileCard(
+                            profile: profile,
+                            isSelected: selectedProfile?.id == profile.id,
+                            onTap: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    selectedProfile = profile
+                                }
+                            }
+                        )
+                        .offset(y: contentOffset)
+                        .opacity(contentOpacity)
+                        .animation(
                             .spring(response: 0.6, dampingFraction: 0.8)
                             .delay(Double(index) * 0.1),
                             value: contentOpacity
                         )
                     }
                 }
+                .padding(.horizontal, 20)
                 
-                Spacer(minLength: 60)
+                Spacer(minLength: 100)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if isActive {
-                animateIn()
+                startAnimations()
             }
         }
         .onChange(of: isActive) { _, newValue in
             if newValue {
-                animateIn()
-            } else {
-                animateOut()
+                startAnimations()
             }
         }
     }
     
-    private func animateIn() {
-        withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
-            iconScale = 1.0
+    private func startAnimations() {
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2)) {
             contentOffset = 0
             contentOpacity = 1.0
         }
     }
+}
+
+// MARK: - Onboarding Profile Card Component
+struct OnboardingProfileCard: View {
+    let profile: HabitProfile
+    let isSelected: Bool
+    let onTap: () -> Void
     
-    private func animateOut() {
-        withAnimation(.easeOut(duration: 0.3)) {
-            iconScale = 0.8
-            contentOffset = 50
-            contentOpacity = 0
+    @State private var isPressed = false
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profile.name)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(HabitTheme.primaryText)
+                        
+                        Text(profile.description)
+                            .font(.subheadline)
+                            .foregroundColor(HabitTheme.secondaryText)
+                    }
+                    
+                    Spacer()
+                    
+                    // Selection indicator
+                    ZStack {
+                        Circle()
+                            .stroke(isSelected ? HabitTheme.primary : HabitTheme.inactive, lineWidth: 2)
+                            .frame(width: 24, height: 24)
+                        
+                        if isSelected {
+                            Circle()
+                                .fill(HabitTheme.primary)
+                                .frame(width: 12, height: 12)
+                                .scaleEffect(isSelected ? 1.0 : 0.1)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+                        }
+                    }
+                }
+                
+                // Sample habits preview
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Includes:")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(HabitTheme.secondaryText)
+                    
+                    ForEach(Array(profile.habits.prefix(3).enumerated()), id: \.offset) { index, habit in
+                        HStack(spacing: 8) {
+                            Text("•")
+                                .foregroundColor(profile.gradientColors.first ?? HabitTheme.accent)
+                                .fontWeight(.bold)
+                            
+                            Text(habit.name)
+                                .font(.caption)
+                                .foregroundColor(HabitTheme.primaryText)
+                            
+                            Spacer()
+                        }
+                    }
+                    
+                    if profile.habits.count > 3 {
+                        Text("+ \(profile.habits.count - 3) more habits")
+                            .font(.caption2)
+                            .foregroundColor(HabitTheme.secondaryText)
+                            .italic()
+                    }
+                }
+            }
+            .padding(20)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(HabitTheme.cardBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                isSelected ? 
+                                LinearGradient(colors: profile.gradientColors, startPoint: .leading, endPoint: .trailing) :
+                                LinearGradient(colors: [HabitTheme.inactive.opacity(0.3)], startPoint: .leading, endPoint: .trailing),
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    )
+                    .shadow(
+                        color: isSelected ? (profile.gradientColors.first?.opacity(0.2) ?? .clear) : .clear,
+                        radius: isSelected ? 8 : 0,
+                        x: 0,
+                        y: isSelected ? 4 : 0
+                    )
+            )
         }
+        .buttonStyle(PlainButtonStyle())
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+    }
+}
+
+// MARK: - First Habit Walkthrough
+struct FirstHabitWalkthroughView: View {
+    let selectedProfile: HabitProfile
+    let onComplete: () -> Void
+    
+    @State private var currentStep = 0
+    @State private var isAnimating = false
+    @State private var showCompletionCelebration = false
+    @State private var hasCompletedFirstHabit = false
+    @EnvironmentObject var habitManager: HabitManager
+    
+    private let walkthroughSteps = [
+        WalkthroughStep(
+            title: "Meet Your First Habit",
+            description: "This is your starting habit. You only need to focus on this one for now.",
+            highlightArea: .habitCard,
+            actionText: "Got it!"
+        ),
+        WalkthroughStep(
+            title: "Complete Your Habit",
+            description: "Tap the circle to mark this habit as complete for today.",
+            highlightArea: .completeButton,
+            actionText: "Mark Complete"
+        ),
+        WalkthroughStep(
+            title: "Track Your Progress",
+            description: "See your streak counter! Complete this habit 3 days in a row to unlock the next one.",
+            highlightArea: .streakCounter,
+            actionText: "Amazing!"
+        ),
+        WalkthroughStep(
+            title: "You're All Set!",
+            description: "Keep building your habits one day at a time. Remember: consistency beats perfection!",
+            highlightArea: .none,
+            actionText: "Start My Journey"
+        )
+    ]
+    
+    var body: some View {
+        ZStack {
+            // Background
+            LinearGradient(
+                colors: [
+                    HabitTheme.backgroundPrimary,
+                    HabitTheme.backgroundSecondary,
+                    HabitTheme.success.opacity(0.05)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 16) {
+                    Text("Let's Get Started!")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(HabitTheme.primaryText)
+                    
+                    Text("Here's how HabitLadder works")
+                        .font(.body)
+                        .foregroundColor(HabitTheme.secondaryText)
+                }
+                .padding(.top, 20)
+                .padding(.horizontal, 20)
+                
+                Spacer()
+                
+                // Demo habit card
+                if let firstHabit = habitManager.habits.first {
+                    DemoHabitCard(
+                        habit: firstHabit,
+                        currentStep: currentStep,
+                        hasCompleted: hasCompletedFirstHabit,
+                        onComplete: {
+                            if currentStep == 1 {
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                    hasCompletedFirstHabit = true
+                                    showCompletionCelebration = true
+                                }
+                                
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showCompletionCelebration = false
+                                        currentStep = 2
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+                
+                Spacer()
+                
+                // Walkthrough instruction panel
+                WalkthroughInstructionPanel(
+                    step: walkthroughSteps[currentStep],
+                    onAction: handleStepAction
+                )
+                .padding(.horizontal, 20)
+                .padding(.bottom, 40)
+            }
+            
+            // Celebration overlay
+            if showCompletionCelebration {
+                ZStack {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 20) {
+                        Text("🎉")
+                            .font(.system(size: 60))
+                            .scaleEffect(showCompletionCelebration ? 1.0 : 0.1)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: showCompletionCelebration)
+                        
+                        Text("Great job!")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text("You completed your first habit!")
+                            .font(.body)
+                            .foregroundColor(.white.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.ultraThinMaterial)
+                    )
+                    .scaleEffect(showCompletionCelebration ? 1.0 : 0.8)
+                    .opacity(showCompletionCelebration ? 1.0 : 0.0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showCompletionCelebration)
+                }
+            }
+        }
+    }
+    
+    private func handleStepAction() {
+        isAnimating = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            isAnimating = false
+        }
+        
+        if currentStep < walkthroughSteps.count - 1 {
+            if currentStep == 1 && !hasCompletedFirstHabit {
+                // Don't advance until they complete the habit
+                return
+            }
+            
+            withAnimation(.easeInOut(duration: 0.3)) {
+                currentStep += 1
+            }
+        } else {
+            onComplete()
+        }
+    }
+}
+
+// MARK: - Walkthrough Step Model
+struct WalkthroughStep {
+    let title: String
+    let description: String
+    let highlightArea: HighlightArea
+    let actionText: String
+    
+    enum HighlightArea {
+        case habitCard
+        case completeButton
+        case streakCounter
+        case none
+    }
+}
+
+// MARK: - Demo Habit Card
+struct DemoHabitCard: View {
+    let habit: Habit
+    let currentStep: Int
+    let hasCompleted: Bool
+    let onComplete: () -> Void
+    
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var glowOpacity: Double = 0.0
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Habit info
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(habit.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HabitTheme.primaryText)
+                    
+                    Text(habit.description)
+                        .font(.subheadline)
+                        .foregroundColor(HabitTheme.secondaryText)
+                    
+                    // Streak counter - highlighted in step 2
+                    HStack(spacing: 8) {
+                        Image(systemName: "flame.fill")
+                            .foregroundColor(.orange)
+                            .font(.caption)
+                        
+                        Text("\(hasCompleted ? 1 : 0)/3")
+                            .font(.caption)
+                            .foregroundColor(hasCompleted ? .green : HabitTheme.secondaryText)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(currentStep == 2 ? HabitTheme.warning.opacity(0.2) : HabitTheme.cardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(currentStep == 2 ? HabitTheme.warning : Color.clear, lineWidth: 2)
+                            )
+                    )
+                    .scaleEffect(currentStep == 2 ? pulseScale : 1.0)
+                }
+                
+                Spacer()
+            }
+            
+            // Status and complete button
+            HStack {
+                if hasCompleted {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        Text("Completed today")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .fontWeight(.medium)
+                    }
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "circle")
+                            .foregroundColor(.blue)
+                            .font(.caption)
+                        Text("Ready to complete")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                            .fontWeight(.medium)
+                    }
+                }
+                
+                Spacer()
+                
+                // Complete button - highlighted in step 1
+                Button(action: onComplete) {
+                    HStack(spacing: 8) {
+                        Image(systemName: hasCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundColor(hasCompleted ? .green : .blue)
+                        
+                        Text(hasCompleted ? "Completed" : "Mark Complete")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(hasCompleted ? .green : .blue)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(hasCompleted ? Color.green.opacity(0.12) : Color.blue.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 24)
+                                    .stroke(
+                                        hasCompleted ? Color.green.opacity(0.4) : Color.blue.opacity(0.4),
+                                        lineWidth: currentStep == 1 ? 3 : 1.5
+                                    )
+                            )
+                            .shadow(
+                                color: currentStep == 1 ? Color.blue.opacity(0.4) : .clear,
+                                radius: currentStep == 1 ? 12 : 0,
+                                x: 0,
+                                y: 0
+                            )
+                    )
+                }
+                .disabled(hasCompleted)
+                .scaleEffect(currentStep == 1 ? pulseScale : 1.0)
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(HabitTheme.cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            currentStep == 0 ? HabitTheme.primary : Color.clear,
+                            lineWidth: currentStep == 0 ? 3 : 0
+                        )
+                )
+                .shadow(
+                    color: currentStep == 0 ? HabitTheme.primary.opacity(0.3) : .black.opacity(0.05),
+                    radius: currentStep == 0 ? 16 : 10,
+                    x: 0,
+                    y: currentStep == 0 ? 8 : 4
+                )
+        )
+        .padding(.horizontal, 20)
+        .onAppear {
+            if currentStep == 0 || currentStep == 1 || currentStep == 2 {
+                startPulseAnimation()
+            }
+        }
+        .onChange(of: currentStep) { _, newValue in
+            if newValue == 0 || newValue == 1 || newValue == 2 {
+                startPulseAnimation()
+            }
+        }
+    }
+    
+    private func startPulseAnimation() {
+        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+            pulseScale = 1.05
+        }
+    }
+}
+
+// MARK: - Walkthrough Instruction Panel
+struct WalkthroughInstructionPanel: View {
+    let step: WalkthroughStep
+    let onAction: () -> Void
+    
+    @State private var isAnimating = false
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 12) {
+                Text(step.title)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(HabitTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                
+                Text(step.description)
+                    .font(.body)
+                    .foregroundColor(HabitTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            
+            Button(action: onAction) {
+                Text(step.actionText)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        LinearGradient(
+                            colors: [HabitTheme.success, HabitTheme.success.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(16)
+            }
+            .scaleEffect(isAnimating ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isAnimating)
+            .onTapGesture {
+                isAnimating = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    isAnimating = false
+                }
+                onAction()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(HabitTheme.cardBackground)
+                .shadow(color: .black.opacity(0.1), radius: 12, x: 0, y: 4)
+        )
     }
 }
 
 // MARK: - Color Theme
 struct HabitTheme {
-    // Primary colors
+    // Primary colors using specific asset names to avoid conflicts
     static let primary = Color("PrimaryColor")
-    static let secondary = Color("SecondaryColor")
+    static let secondary = Color("SecondaryColor") 
     static let accent = Color("AccentColor")
     
     // Background colors
@@ -315,6 +993,7 @@ struct HabitTheme {
     static let success = Color("SuccessColor")
     static let warning = Color("WarningColor")
     static let inactive = Color("InactiveColor")
+    static let gold = Color(red: 1.0, green: 0.84, blue: 0.0) // Celebration gold color
     
     // Semantic colors with dark mode support
     static let primaryText: Color = Color.primary
@@ -393,19 +1072,30 @@ struct ConfettiParticle: Identifiable {
     var life: Double = 1.0
     
     static func createRandom(in rect: CGRect) -> ConfettiParticle {
-        let colors: [Color] = [
-            .red, .blue, .green, .yellow, .purple, .orange, .pink, .cyan
+        let celebrationColors: [Color] = [
+            .red, .blue, .green, .yellow, .purple, .orange, .pink, .cyan,
+            .mint, .indigo, .teal, .brown, HabitTheme.gold,
+            Color(red: 1.0, green: 0.4, blue: 0.6), // Hot pink
+            Color(red: 0.5, green: 1.0, blue: 0.3), // Lime green
+            Color(red: 1.0, green: 0.6, blue: 0.0), // Bright orange
+            Color(red: 0.3, green: 0.8, blue: 1.0), // Sky blue
+            Color(red: 1.0, green: 0.0, blue: 1.0)  // Magenta equivalent
         ]
+        
+        // Create particles from top and slightly off-screen for dramatic effect
+        let startY = CGFloat.random(in: -100...(-20))
+        let velocityMagnitude = CGFloat.random(in: 6...12)
+        let angle = CGFloat.random(in: 0...(2 * .pi))
         
         return ConfettiParticle(
             x: CGFloat.random(in: 0...rect.width),
-            y: rect.height + 50,
-            velocityX: CGFloat.random(in: -3...3),
-            velocityY: CGFloat.random(in: -8...(-4)),
-            color: colors.randomElement() ?? .blue,
-            size: CGFloat.random(in: 4...8),
+            y: startY,
+            velocityX: cos(angle) * velocityMagnitude * CGFloat.random(in: 0.3...1.0),
+            velocityY: sin(angle) * velocityMagnitude + CGFloat.random(in: 2...5),
+            color: celebrationColors.randomElement() ?? .blue,
+            size: CGFloat.random(in: 6...14),
             rotation: Double.random(in: 0...360),
-            rotationSpeed: Double.random(in: -5...5)
+            rotationSpeed: Double.random(in: -8...8)
         )
     }
 }
@@ -424,12 +1114,13 @@ struct ConfettiView: View {
         GeometryReader { geometry in
             ZStack {
                 ForEach(particles) { particle in
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: particle.size * 0.2)
                         .fill(particle.color)
                         .frame(width: particle.size, height: particle.size)
                         .rotationEffect(.degrees(particle.rotation))
                         .position(x: particle.x, y: particle.y)
                         .opacity(particle.life)
+                        .scaleEffect(particle.life * 0.8 + 0.2) // Fade out with scale
                 }
             }
             .onAppear {
@@ -445,15 +1136,15 @@ struct ConfettiView: View {
     private func startConfetti(in size: CGSize) {
         let rect = CGRect(origin: .zero, size: size)
         
-        // Initial burst
-        for _ in 0..<50 {
+        // Initial dramatic burst
+        for _ in 0..<80 {
             particles.append(ConfettiParticle.createRandom(in: rect))
         }
         
-        // Continuous generation
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+        // Continuous generation with more particles
+        timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
             // Add new particles
-            for _ in 0..<3 {
+            for _ in 0..<5 {
                 particles.append(ConfettiParticle.createRandom(in: rect))
             }
             
@@ -462,727 +1153,184 @@ struct ConfettiView: View {
                 var updatedParticle = particle
                 updatedParticle.x += particle.velocityX
                 updatedParticle.y += particle.velocityY
-                updatedParticle.velocityY += 0.2 // gravity
+                updatedParticle.velocityY += 0.25 // gravity
+                updatedParticle.velocityX *= 0.995 // air resistance
                 updatedParticle.rotation += particle.rotationSpeed
-                updatedParticle.life -= 0.02
+                updatedParticle.life -= 0.015
                 
-                return updatedParticle.life > 0 && updatedParticle.y < size.height + 100 ? updatedParticle : nil
+                return updatedParticle.life > 0 && updatedParticle.y < size.height + 150 ? updatedParticle : nil
             }
         }
         
         // Stop after duration
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
             timer?.invalidate()
-            withAnimation(.easeOut(duration: 1.0)) {
+            withAnimation(.easeOut(duration: 1.5)) {
                 particles.removeAll()
             }
         }
     }
 }
 
-// MARK: - Models
-struct Habit: Identifiable, Codable {
-    var id = UUID()
-    var name: String
-    var description: String
-    
-    /// Array storing completion dates as Date objects
-    /// Each date represents a day when the habit was completed
-    var completionDates: [Date] = []
-    
-    /// Store the last checked date to prevent double submissions
-    var lastCheckedDate: Date?
-    
-    var isUnlocked: Bool = false
-    
-    // Check if habit has been completed 3 times in a row
-    var hasThreeConsecutiveCompletions: Bool {
-        return consecutiveStreakCount >= 3
-    }
-    
-    /// Returns the current consecutive completion streak count
-    var consecutiveStreakCount: Int {
-        guard !completionDates.isEmpty else { return 0 }
-        
-        let sortedDates = completionDates.sorted(by: >)  // Most recent first
-        let calendar = Calendar.current
-        
-        // Start from the most recent completion and count backwards
-        var streak = 1
-        var currentDate = sortedDates[0]
-        
-        for i in 1..<sortedDates.count {
-            let nextDate = sortedDates[i]
-            let daysBetween = calendar.dateComponents([.day], from: nextDate, to: currentDate).day ?? 0
-            
-            if daysBetween == 1 {
-                streak += 1
-                currentDate = nextDate
-            } else {
-                break  // Streak is broken
-            }
-        }
-        
-        return streak
-    }
-    
-    /// Check if habit has been completed today using Calendar.current.isDateInToday()
-    var isCompletedToday: Bool {
-        guard let lastCheckedDate = lastCheckedDate else { return false }
-        return Calendar.current.isDateInToday(lastCheckedDate)
-    }
-    
-    /// Total number of days this habit has been completed
-    var totalCompletionDays: Int {
-        return completionDates.count
-    }
-    
-    /// Check if this habit can be completed today (unlocked and not already completed)
-    var canCompleteToday: Bool {
-        return isUnlocked && !isCompletedToday
-    }
-    
-    /// Check if this habit is eligible to unlock the next habit
-    var isEligibleToUnlockNext: Bool {
-        return hasThreeConsecutiveCompletions
-    }
-}
-
-// MARK: - Custom Habit Ladder Model
-struct CustomHabitLadder: Identifiable, Codable {
-    var id = UUID()
-    var name: String
-    var habits: [Habit]
-    var createdDate: Date = Date()
-    
-    init(name: String, habits: [Habit]) {
-        self.name = name
-        self.habits = habits
-        // Ensure first habit is unlocked
-        if !habits.isEmpty {
-            self.habits[0].isUnlocked = true
-        }
-    }
-}
-
-// MARK: - Habit Storage Manager
-class HabitManager: ObservableObject {
-    @Published var habits: [Habit] = []
-    @Published var customLadders: [CustomHabitLadder] = []
-    @Published var activeCustomLadder: CustomHabitLadder?
-    @Published var showConfetti: Bool = false
-    @Published var lastUnlockedHabitId: UUID?
-    
-    private let userDefaults = UserDefaults.standard
-    private let habitsKey = "SavedHabits"
-    private let customLaddersKey = "CustomHabitLadders"
-    private let activeCustomLadderKey = "ActiveCustomLadder"
-    
-    // Check if all habits are unlocked
-    var allHabitsUnlocked: Bool {
-        !habits.isEmpty && habits.allSatisfy { $0.isUnlocked }
-    }
-    
-    init() {
-        loadData()
-    }
-    
-    func loadData() {
-        loadHabits()
-        loadCustomLadders()
-        loadActiveCustomLadder()
-    }
-    
-    func loadHabits() {
-        if let data = userDefaults.data(forKey: habitsKey),
-           let decodedHabits = try? JSONDecoder().decode([Habit].self, from: data) {
-            self.habits = decodedHabits
-        } else {
-            // Initialize with default habits if none exist
-            self.habits = createDefaultHabits()
-        }
-        updateUnlockedStatus()
-    }
-    
-    func loadCustomLadders() {
-        if let data = userDefaults.data(forKey: customLaddersKey),
-           let decodedLadders = try? JSONDecoder().decode([CustomHabitLadder].self, from: data) {
-            self.customLadders = decodedLadders
-        }
-    }
-    
-    func loadActiveCustomLadder() {
-        if let data = userDefaults.data(forKey: activeCustomLadderKey),
-           let decodedLadder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
-            self.activeCustomLadder = decodedLadder
-            // Use custom ladder habits instead of default
-            self.habits = decodedLadder.habits
-            updateUnlockedStatus()
-        }
-    }
-    
-    func saveHabits() {
-        if let encoded = try? JSONEncoder().encode(habits) {
-            userDefaults.set(encoded, forKey: habitsKey)
-        }
-        
-        // If using custom ladder, update it too
-        if var customLadder = activeCustomLadder {
-            customLadder.habits = habits
-            activeCustomLadder = customLadder
-            saveActiveCustomLadder()
-            updateCustomLadder(customLadder)
-        }
-    }
-    
-    func saveCustomLadders() {
-        if let encoded = try? JSONEncoder().encode(customLadders) {
-            userDefaults.set(encoded, forKey: customLaddersKey)
-        }
-    }
-    
-    func saveActiveCustomLadder() {
-        if let ladder = activeCustomLadder,
-           let encoded = try? JSONEncoder().encode(ladder) {
-            userDefaults.set(encoded, forKey: activeCustomLadderKey)
-        } else {
-            userDefaults.removeObject(forKey: activeCustomLadderKey)
-        }
-    }
-    
-    func createDefaultHabits() -> [Habit] {
-        return [
-            Habit(name: "Drink 8 glasses of water", description: "Stay hydrated throughout the day", isUnlocked: true),
-            Habit(name: "Take a 10-minute walk", description: "Get some fresh air and light exercise"),
-            Habit(name: "Read for 15 minutes", description: "Expand your knowledge and vocabulary"),
-            Habit(name: "Practice gratitude", description: "Write down 3 things you're grateful for"),
-            Habit(name: "Meditate for 5 minutes", description: "Focus on mindfulness and breathing"),
-            Habit(name: "Exercise for 30 minutes", description: "Complete a workout or active activity"),
-            Habit(name: "Learn something new", description: "Spend time on a new skill or hobby"),
-            Habit(name: "Connect with a friend", description: "Reach out to someone you care about")
-        ]
-    }
-    
-    func updateUnlockedStatus() {
-        let wasAllUnlocked = allHabitsUnlocked
-        
-        // First habit is always unlocked
-        if !habits.isEmpty {
-            habits[0].isUnlocked = true
-        }
-        
-        // Track newly unlocked habits
-        var newlyUnlockedHabits: [UUID] = []
-        
-        // Unlock subsequent habits based on previous completions
-        for i in 1..<habits.count {
-            let wasUnlocked = habits[i].isUnlocked
-            habits[i].isUnlocked = habits[i-1].isEligibleToUnlockNext
-            
-            // Track if this habit was just unlocked
-            if !wasUnlocked && habits[i].isUnlocked {
-                newlyUnlockedHabits.append(habits[i].id)
-            }
-        }
-        
-        // Set the last unlocked habit for animation
-        if let lastUnlocked = newlyUnlockedHabits.last {
-            lastUnlockedHabitId = lastUnlocked
-        }
-        
-        // Check if all habits are now unlocked and trigger confetti
-        if !wasAllUnlocked && allHabitsUnlocked {
-            triggerConfetti()
-        }
-    }
-    
-    private func triggerConfetti() {
-        withAnimation(.easeInOut(duration: 0.5)) {
-            showConfetti = true
-        }
-        
-        // Hide confetti after animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [self] in
-            withAnimation(.easeOut(duration: 0.5)) {
-                showConfetti = false
-            }
-        }
-    }
-    
-    func toggleHabitCompletion(for habitId: UUID) {
-        guard let index = habits.firstIndex(where: { $0.id == habitId }) else { return }
-        
-        let today = Date()
-        
-        // Check if already completed today using Calendar.current.isDateInToday()
-        if let lastCheckedDate = habits[index].lastCheckedDate,
-           Calendar.current.isDateInToday(lastCheckedDate) {
-            // Already completed today, prevent double submission
-            return
-        }
-        
-        // Add today's completion and update last checked date
-        habits[index].completionDates.append(today)
-        habits[index].lastCheckedDate = today
-        
-        updateUnlockedStatus()
-        saveHabits()
-    }
-    
-    func resetAllHabits() {
-        for i in 0..<habits.count {
-            habits[i].completionDates.removeAll()
-            habits[i].lastCheckedDate = nil
-            habits[i].isUnlocked = (i == 0) // Only first habit remains unlocked
-        }
-        showConfetti = false
-        lastUnlockedHabitId = nil
-        saveHabits()
-    }
-    
-    // MARK: - Custom Ladder Management
-    func addCustomLadder(_ ladder: CustomHabitLadder) {
-        customLadders.append(ladder)
-        saveCustomLadders()
-    }
-    
-    func updateCustomLadder(_ updatedLadder: CustomHabitLadder) {
-        if let index = customLadders.firstIndex(where: { $0.id == updatedLadder.id }) {
-            customLadders[index] = updatedLadder
-            saveCustomLadders()
-        }
-    }
-    
-    func deleteCustomLadder(_ ladder: CustomHabitLadder) {
-        customLadders.removeAll { $0.id == ladder.id }
-        saveCustomLadders()
-        
-        // If deleted ladder was active, switch back to default
-        if activeCustomLadder?.id == ladder.id {
-            switchToDefaultHabits()
-        }
-    }
-    
-    func activateCustomLadder(_ ladder: CustomHabitLadder) {
-        activeCustomLadder = ladder
-        habits = ladder.habits
-        updateUnlockedStatus()
-        saveActiveCustomLadder()
-    }
-    
-    func switchToDefaultHabits() {
-        activeCustomLadder = nil
-        saveActiveCustomLadder()
-        loadHabits() // Reload default habits
-    }
-}
-
-// MARK: - Custom Habit Ladder Creation View
-struct CustomHabitLadderView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject var habitManager: HabitManager
-    
-    @State private var ladderName = ""
-    @State private var customHabits: [Habit] = []
-    @State private var showingAddHabit = false
-    @State private var editingHabit: Habit?
-    @State private var newHabitName = ""
-    @State private var newHabitDescription = ""
-    @State private var showingDeleteAlert = false
-    @State private var habitToDelete: Habit?
-    
-    var canSave: Bool {
-        !ladderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        customHabits.count >= 3 &&
-        customHabits.count <= 7
-    }
+// MARK: - Celebration Popup View
+struct CelebrationPopup: View {
+    let message: String
+    @Binding var isShowing: Bool
+    @State private var scale: CGFloat = 0.1
+    @State private var opacity: Double = 0
+    @State private var rotationAngle: Double = -10
+    @State private var bounceOffset: CGFloat = 0
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Header
-                VStack(spacing: 16) {
-                    TextField("Ladder Name", text: $ladderName)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .textFieldStyle(ModernLargeTextFieldStyle())
-                    
-                    Text("Create 3-7 habits in the order you want to build them")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+        ZStack {
+            // Background overlay
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        isShowing = false
+                    }
                 }
-                .padding()
-                .background(HabitTheme.lockedBackground)
-                
-                // Habits List
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(Array(customHabits.enumerated()), id: \.element.id) { index, habit in
-                            CustomHabitEditRow(
-                                habit: habit,
-                                index: index,
-                                onEdit: { editingHabit = habit },
-                                onDelete: { 
-                                    habitToDelete = habit
-                                    showingDeleteAlert = true
-                                },
-                                onMoveUp: index > 0 ? { moveHabit(from: index, to: index - 1) } : nil,
-                                onMoveDown: index < customHabits.count - 1 ? { moveHabit(from: index, to: index + 1) } : nil
+            
+            // Celebration popup
+            VStack(spacing: 20) {
+                // Celebration icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.yellow, Color.orange, Color.red],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             )
-                        }
-                        
-                        // Add habit button
-                        if customHabits.count < 7 {
-                            Button(action: { showingAddHabit = true }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.title3)
-                                    Text("Add Habit")
-                                        .fontWeight(.semibold)
-                                }
-                                .font(.headline)
-                                .foregroundColor(.blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .fill(Color.blue.opacity(0.12))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.blue.opacity(0.4), lineWidth: 1.5)
-                                        )
-                                        .shadow(
-                                            color: Color.blue.opacity(0.15),
-                                            radius: 8,
-                                            x: 0,
-                                            y: 4
-                                        )
-                                )
-                            }
-                        }
-                    }
-                    .padding()
+                        )
+                        .frame(width: 80, height: 80)
+                        .shadow(color: Color.yellow.opacity(0.6), radius: 16, x: 0, y: 4)
+                    
+                    Text("🎉")
+                        .font(.system(size: 40))
+                        .rotationEffect(.degrees(rotationAngle))
+                        .offset(y: bounceOffset)
                 }
                 
-                // Save button
-                Button(action: saveCustomLadder) {
-                    Text("Create Ladder")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(canSave ? Color.blue : Color.gray)
-                                .shadow(
-                                    color: canSave ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2),
-                                    radius: 12,
-                                    x: 0,
-                                    y: 6
-                                )
-                        )
-                }
-                .disabled(!canSave)
-                .scaleEffect(canSave ? 1.0 : 0.98)
-                .animation(.easeInOut(duration: 0.2), value: canSave)
-                .padding()
+                // Message
+                Text(message)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(HabitTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                
+                // Tap to continue
+                Text("Tap anywhere to continue")
+                    .font(.caption)
+                    .foregroundColor(HabitTheme.secondaryText)
+                    .opacity(0.8)
             }
-            .navigationTitle("Custom Ladder")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingAddHabit) {
-            AddHabitView(
-                habitName: $newHabitName,
-                habitDescription: $newHabitDescription,
-                onSave: addNewHabit,
-                onCancel: { showingAddHabit = false }
+            .padding(30)
+            .background(
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(HabitTheme.cardBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.yellow.opacity(0.8), Color.orange.opacity(0.6)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
+                            )
+                    )
+                    .shadow(
+                        color: Color.yellow.opacity(0.4),
+                        radius: 20,
+                        x: 0,
+                        y: 8
+                    )
             )
+            .scaleEffect(scale)
+            .opacity(opacity)
         }
-        .sheet(item: $editingHabit) { habit in
-            EditHabitView(
-                habit: habit,
-                onSave: { updatedHabit in
-                    updateHabit(updatedHabit)
-                    editingHabit = nil
-                },
-                onCancel: { editingHabit = nil }
-            )
-        }
-        .alert("Delete Habit", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                if let habit = habitToDelete {
-                    deleteHabit(habit)
-                }
+        .onAppear {
+            // Entry animation
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7, blendDuration: 0.2)) {
+                scale = 1.0
+                opacity = 1.0
             }
-        } message: {
-            Text("Are you sure you want to delete this habit?")
+            
+            // Bounce animation for emoji
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                bounceOffset = -5
+            }
+            
+            // Rotation animation for emoji
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                rotationAngle = 10
+            }
         }
-    }
-    
-    private func addNewHabit() {
-        let habit = Habit(
-            name: newHabitName,
-            description: newHabitDescription,
-            isUnlocked: customHabits.isEmpty
-        )
-        customHabits.append(habit)
-        newHabitName = ""
-        newHabitDescription = ""
-        showingAddHabit = false
-    }
-    
-    private func updateHabit(_ updatedHabit: Habit) {
-        if let index = customHabits.firstIndex(where: { $0.id == updatedHabit.id }) {
-            customHabits[index] = updatedHabit
-        }
-    }
-    
-    private func deleteHabit(_ habit: Habit) {
-        customHabits.removeAll { $0.id == habit.id }
-    }
-    
-    private func moveHabit(from source: Int, to destination: Int) {
-        let habit = customHabits.remove(at: source)
-        customHabits.insert(habit, at: destination)
-    }
-    
-    private func saveCustomLadder() {
-        let ladder = CustomHabitLadder(
-            name: ladderName,
-            habits: customHabits
-        )
-        habitManager.addCustomLadder(ladder)
-        dismiss()
     }
 }
 
-// MARK: - Custom Habit Edit Row
-struct CustomHabitEditRow: View {
-    let habit: Habit
-    let index: Int
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-    let onMoveUp: (() -> Void)?
-    let onMoveDown: (() -> Void)?
+// MARK: - Micro Affirmation View
+struct MicroAffirmationView: View {
+    let message: String
+    @State private var offset: CGFloat = 0
+    @State private var opacity: Double = 0
+    @State private var scale: CGFloat = 0.8
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Order number
-            Text("\(index + 1)")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.blue)
-                .frame(width: 30)
-            
-            // Habit info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(habit.name)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                Text(habit.description)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-            
+        VStack {
             Spacer()
             
-            // Move buttons
-            VStack(spacing: 8) {
-                if let onMoveUp = onMoveUp {
-                    Button(action: onMoveUp) {
-                        Image(systemName: "chevron.up")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
+            HStack(spacing: 12) {
+                // Heart icon
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.pink)
+                    .scaleEffect(scale)
                 
-                if let onMoveDown = onMoveDown {
-                    Button(action: onMoveDown) {
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
+                // Message
+                Text(message)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(HabitTheme.primaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(HabitTheme.cardBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.pink.opacity(0.3), lineWidth: 1.5)
+                    )
+                    .shadow(
+                        color: Color.pink.opacity(0.2),
+                        radius: 8,
+                        x: 0,
+                        y: 4
+                    )
+            )
+            .offset(y: offset)
+            .opacity(opacity)
+            .scaleEffect(scale)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 100)
+        }
+        .onAppear {
+            // Entry animation
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0.2)) {
+                offset = -20
+                opacity = 1.0
+                scale = 1.0
             }
             
-            // Edit and delete buttons
-            HStack(spacing: 8) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-                
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(HabitTheme.cardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(HabitTheme.unlockedBorder.opacity(0.4), lineWidth: 1.5)
-                )
-                .shadow(
-                    color: .black.opacity(0.06),
-                    radius: 8,
-                    x: 0,
-                    y: 4
-                )
-        )
-    }
-}
-
-// MARK: - Add Habit View
-struct AddHabitView: View {
-    @Binding var habitName: String
-    @Binding var habitDescription: String
-    let onSave: () -> Void
-    let onCancel: () -> Void
-    
-    var canSave: Bool {
-        !habitName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !habitDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Habit Name")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(HabitTheme.secondaryText)
-                        .padding(.leading, 4)
-                    
-                    TextField("Enter habit name", text: $habitName)
-                        .textFieldStyle(ModernTextFieldStyle())
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Description")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(HabitTheme.secondaryText)
-                        .padding(.leading, 4)
-                    
-                    TextField("Describe this habit", text: $habitDescription, axis: .vertical)
-                        .textFieldStyle(ModernTextFieldStyle())
-                        .lineLimit(3...6)
-                }
-                
-                Spacer()
-            }
-            .padding(20)
-            .navigationTitle("Add Habit")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel", action: onCancel)
-                        .foregroundColor(.secondary)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save", action: onSave)
-                        .disabled(!canSave)
-                        .foregroundColor(canSave ? .blue : .gray)
-                        .fontWeight(.semibold)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Edit Habit View
-struct EditHabitView: View {
-    let habit: Habit
-    let onSave: (Habit) -> Void
-    let onCancel: () -> Void
-    
-    @State private var habitName: String
-    @State private var habitDescription: String
-    
-    init(habit: Habit, onSave: @escaping (Habit) -> Void, onCancel: @escaping () -> Void) {
-        self.habit = habit
-        self.onSave = onSave
-        self.onCancel = onCancel
-        self._habitName = State(initialValue: habit.name)
-        self._habitDescription = State(initialValue: habit.description)
-    }
-    
-    var canSave: Bool {
-        !habitName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !habitDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Habit Name")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(HabitTheme.secondaryText)
-                        .padding(.leading, 4)
-                    
-                    TextField("Enter habit name", text: $habitName)
-                        .textFieldStyle(ModernTextFieldStyle())
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Description")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(HabitTheme.secondaryText)
-                        .padding(.leading, 4)
-                    
-                    TextField("Describe this habit", text: $habitDescription, axis: .vertical)
-                        .textFieldStyle(ModernTextFieldStyle())
-                        .lineLimit(3...6)
-                }
-                
-                Spacer()
-            }
-            .padding(20)
-            .navigationTitle("Edit Habit")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel", action: onCancel)
-                        .foregroundColor(.secondary)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        var updatedHabit = habit
-                        updatedHabit.name = habitName
-                        updatedHabit.description = habitDescription
-                        onSave(updatedHabit)
-                    }
-                    .disabled(!canSave)
-                    .foregroundColor(canSave ? .blue : .gray)
-                    .fontWeight(.semibold)
-                }
+            // Heart pulse animation
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                scale = 1.1
             }
         }
     }
@@ -1190,12 +1338,43 @@ struct EditHabitView: View {
 
 // MARK: - Main Content View
 struct ContentView: View {
-    @StateObject private var habitManager = HabitManager()
-    @State private var showingResetAlert = false
+    @EnvironmentObject var storeManager: StoreManager
+    @EnvironmentObject var habitManager: HabitManager
+    @StateObject private var notificationManager = NotificationManager.shared
+    
+    // Onboarding and navigation states
+    @State private var showOnboarding = false
     @State private var showingCustomLadderView = false
     @State private var showingLadderSelection = false
-    @State private var showOnboarding = false
+    @State private var showingCuratedLadders = false
+    @State private var showingResetAlert = false
+    @State private var showingCustomLadderLimitAlert = false
+    @State private var customLadderLimitMessage = ""
     @State private var hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    
+    // End-of-day recap state
+    @State private var showingEndOfDayRecap = false
+    
+    // Check if we should show the end-of-day recap
+    private var shouldShowEndOfDayRecap: Bool {
+        guard storeManager.isPremiumUser else { return false }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Check if it's after 7 PM
+        let hour = calendar.component(.hour, from: now)
+        guard hour >= 19 else { return false } // 19:00 = 7 PM
+        
+        // Check if we've already shown the recap today
+        let lastShownDateKey = "EndOfDayRecapLastShown"
+        if let lastShownDate = UserDefaults.standard.object(forKey: lastShownDateKey) as? Date,
+           calendar.isDateInToday(lastShownDate) {
+            return false
+        }
+        
+        return true
+    }
     
     var body: some View {
         Group {
@@ -1203,6 +1382,8 @@ struct ContentView: View {
                 OnboardingView {
                     completeOnboarding()
                 }
+                .environmentObject(storeManager)
+                .environmentObject(habitManager)
             } else {
                 mainAppContent
             }
@@ -1211,11 +1392,133 @@ struct ContentView: View {
             if !hasCompletedOnboarding {
                 showOnboarding = true
             }
+            
+            // Set up notification integration
+            habitManager.setPremiumStatusCallback { [weak storeManager] in
+                return storeManager?.isPremiumUser ?? false
+            }
+            
+            // Initial notification scheduling
+            notificationManager.scheduleNotifications(for: habitManager.habits, isPremiumUser: storeManager.isPremiumUser)
+            
+            // Check for end-of-day recap after a small delay to let the app settle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if shouldShowEndOfDayRecap {
+                    showingEndOfDayRecap = true
+                    // Mark recap as shown for today
+                    UserDefaults.standard.set(Date(), forKey: "EndOfDayRecapLastShown")
+                }
+            }
+        }
+        .onChange(of: storeManager.isPremiumUser) { oldValue, newValue in
+            // Update notifications when premium status changes
+            notificationManager.handlePremiumStatusChange(isPremium: newValue, habits: habitManager.habits)
         }
     }
     
     private var mainAppContent: some View {
-        NavigationView {
+        TabView {
+            // Main Habits Tab
+            habitTrackingView
+                .tabItem {
+                    Image(systemName: "checklist")
+                    Text("Habits")
+                }
+            
+            // Settings Tab
+            SettingsView(
+                storeManager: storeManager,
+                habitManager: habitManager
+            )
+            .tabItem {
+                Image(systemName: "gear")
+                Text("Settings")
+            }
+        }
+        .accentColor(HabitTheme.primary)
+        .onAppear {
+            // Apply modern tab bar styling
+            setupModernTabBarAppearance()
+        }
+    }
+    
+    // MARK: - Tab Bar Styling
+    private func setupModernTabBarAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        
+        // Background styling with blur effect
+        appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.95)
+        appearance.backgroundEffect = UIBlurEffect(style: .systemMaterial)
+        appearance.shadowImage = UIImage()
+        appearance.shadowColor = UIColor.clear
+        
+        // Get primary color from HabitTheme
+        let primaryUIColor = UIColor(HabitTheme.primary)
+        
+        // Normal item appearance with better spacing
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.secondaryLabel,
+            .font: UIFont.systemFont(ofSize: 12, weight: .medium)
+        ]
+        appearance.stackedLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
+        appearance.stackedLayoutAppearance.normal.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: 4)
+        
+        // Selected item appearance with app's primary color
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: primaryUIColor,
+            .font: UIFont.systemFont(ofSize: 12, weight: .semibold)
+        ]
+        appearance.stackedLayoutAppearance.selected.iconColor = primaryUIColor
+        appearance.stackedLayoutAppearance.selected.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: 4)
+        
+        // Apply to all tab bar instances
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+        
+        // Configure modern spacing and positioning
+        DispatchQueue.main.async {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let tabBarController = window.rootViewController as? UITabBarController ?? 
+                                     window.rootViewController?.children.compactMap({ $0 as? UITabBarController }).first {
+                
+                let tabBar = tabBarController.tabBar
+                
+                // Add subtle shadow with better parameters
+                tabBar.layer.shadowColor = UIColor.black.cgColor
+                tabBar.layer.shadowOpacity = 0.06
+                tabBar.layer.shadowOffset = CGSize(width: 0, height: -2)
+                tabBar.layer.shadowRadius = 12
+                tabBar.layer.masksToBounds = false
+                
+                // Improve item positioning and spacing
+                tabBar.itemSpacing = 20
+                tabBar.itemPositioning = .centered
+                
+                // Add subtle top border for definition
+                let borderLayer = CALayer()
+                borderLayer.backgroundColor = UIColor.separator.withAlphaComponent(0.2).cgColor
+                borderLayer.frame = CGRect(x: 0, y: 0, width: tabBar.frame.width, height: 0.33)
+                borderLayer.name = "modernTopBorder" // Add identifier to avoid duplicates
+                
+                // Remove existing border if present
+                if let existingBorder = tabBar.layer.sublayers?.first(where: { $0.name == "modernTopBorder" }) {
+                    existingBorder.removeFromSuperlayer()
+                }
+                
+                tabBar.layer.addSublayer(borderLayer)
+                
+                // Ensure proper edge padding for modern look
+                // iOS 17+ has better default styling
+                tabBar.scrollEdgeAppearance?.shadowColor = .clear
+                tabBar.standardAppearance.shadowColor = .clear
+            }
+        }
+    }
+    
+    private var habitTrackingView: some View {
+        NavigationStack {
             ZStack {
                 // Background
                 HabitTheme.unlockedBackground
@@ -1225,117 +1528,135 @@ struct ContentView: View {
                     // Header
                     VStack(spacing: 8) {
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(habitManager.activeCustomLadder?.name ?? "HabitLadder")
-                                    .font(.largeTitle)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(HabitTheme.primaryText)
-                                
-                                Text(habitManager.activeCustomLadder != nil ? "Custom ladder" : "Build habits step by step")
-                                    .font(.subheadline)
-                                    .foregroundColor(HabitTheme.secondaryText)
-                            }
+                            Text(habitManager.activeCustomLadder?.name ?? habitManager.defaultLadder?.name ?? "HabitLadder")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(HabitTheme.primaryText)
                             
                             Spacer()
                             
-                            // All habits unlocked indicator
-                            if habitManager.allHabitsUnlocked {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "star.circle.fill")
-                                        .foregroundColor(.yellow)
-                                        .font(.title2)
-                                    Text("Complete!")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(HabitTheme.primaryText)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(.yellow.opacity(0.15))
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(.yellow.opacity(0.3), lineWidth: 1)
-                                        )
-                                )
-                                .scaleEffect(habitManager.allHabitsUnlocked ? 1.0 : 0.8)
-                                .opacity(habitManager.allHabitsUnlocked ? 1.0 : 0.0)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.8), value: habitManager.allHabitsUnlocked)
-                            }
-                            
-                            // Menu button
+                            // Consolidated menu button
                             Menu {
-                                Button(action: { showingCustomLadderView = true }) {
-                                    Label("Create Custom Ladder", systemImage: "plus")
+                                // Ladder switching section
+                                if !habitManager.customLadders.isEmpty || habitManager.activeCustomLadder != nil {
+                                    Button(action: { showingLadderSelection = true }) {
+                                        Label("Switch Ladder", systemImage: "arrow.triangle.2.circlepath")
+                                    }
+                                    
+                                    Divider()
                                 }
                                 
-                                if !habitManager.customLadders.isEmpty {
-                                    Button(action: { showingLadderSelection = true }) {
-                                        Label("Switch Ladder", systemImage: "arrow.left.arrow.right")
+                                Button(action: { 
+                                    if habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) {
+                                        showingCustomLadderView = true
+                                    } else {
+                                        customLadderLimitMessage = habitManager.getCustomLadderLimitMessage()
+                                        showingCustomLadderLimitAlert = true
+                                    }
+                                }) {
+                                    HStack {
+                                        Label("Create Custom Ladder", systemImage: "plus")
+                                        if !habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) {
+                                            Image(systemName: "lock.fill")
+                                                .foregroundColor(.orange)
+                                                .font(.caption)
+                                        }
                                     }
                                 }
+
+                                Button(action: { showingCuratedLadders = true }) {
+                                    Label("Unlock Curated Ladders", systemImage: "star.fill")
+                                }
+                                
+
                                 
                                 if habitManager.activeCustomLadder != nil {
-                                    Button(action: { habitManager.switchToDefaultHabits() }) {
-                                        Label("Use Default Ladder", systemImage: "house")
+                                    Button(action: { 
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            habitManager.switchToDefaultLadder()
+                                        }
+                                    }) {
+                                        Label("Switch to Default Ladder", systemImage: "house")
                                     }
                                 }
                             } label: {
-                                Image(systemName: "plus.circle")
-                                    .font(.title2)
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(HabitTheme.lockedBackground)
-                    
-                    // Habits List
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(Array(habitManager.habits.enumerated()), id: \.element.id) { index, habit in
-                                HabitRow(
-                                    habit: habit,
-                                    index: index,
-                                    onToggle: { 
-                                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                            habitManager.toggleHabitCompletion(for: habit.id)
-                                        }
-                                    },
-                                    habits: habitManager.habits,
-                                    isNewlyUnlocked: habitManager.lastUnlockedHabitId == habit.id
+                                HStack(spacing: 6) {
+                                    Text(habitManager.activeCustomLadder?.emoji ?? habitManager.defaultLadder?.emoji ?? "🪜")
+                                        .font(.title2)
+                                    Image(systemName: "ellipsis.circle")
+                                        .font(.title2)
+                                        .foregroundColor(.blue)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(.blue.opacity(0.1))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(.blue.opacity(0.3), lineWidth: 1)
+                                        )
                                 )
                             }
                         }
-                        .padding()
-                    }
-                    
-                    // Reset Button
-                    Button(action: {
-                        showingResetAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Reset All Habits")
-                        }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            LinearGradient(
-                                colors: [Color.red, Color.red.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(16)
-                        .shadow(color: .red.opacity(0.3), radius: 8, x: 0, y: 4)
                     }
                     .padding()
-                    .scaleEffect(showingResetAlert ? 0.95 : 1.0)
-                    .animation(.easeInOut(duration: 0.1), value: showingResetAlert)
+                    
+                    // Habits List and Reset Button in ScrollView
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            // Show loading or empty state if no habits
+                            if habitManager.habits.isEmpty {
+                                EmptyHabitsView()
+                                    .padding()
+                            } else {
+                                ForEach(Array(habitManager.habits.enumerated()), id: \.element.id) { index, habit in
+                                    HabitRow(
+                                        habit: habit,
+                                        index: index,
+                                        onToggle: { 
+                                            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                                habitManager.toggleHabitCompletion(for: habit.id)
+                                            }
+                                        },
+                                        habits: habitManager.habits,
+                                        isNewlyUnlocked: habitManager.unlockedHabitForAnimation == habit.id
+                                    )
+                                }
+                            }
+                        }
+                        .padding()
+                        
+                        // Reset Button inside ScrollView
+                        Button(action: {
+                            showingResetAlert = true
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Reset All Habits")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.red, Color.red.opacity(0.8)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(16)
+                            .shadow(color: .red.opacity(0.3), radius: 8, x: 0, y: 4)
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .scaleEffect(showingResetAlert ? 0.95 : 1.0)
+                        .animation(.easeInOut(duration: 0.1), value: showingResetAlert)
+                        
+                        // Footer at bottom of scrollable content
+                        AppFooter()
+                    }
                 }
                 
                 // Confetti overlay
@@ -1344,14 +1665,69 @@ struct ContentView: View {
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
+                
+                // Enhanced sparkle animation overlay
+                if habitManager.showSparkleAnimation {
+                    SparkleAnimation()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                        .zIndex(0.5)
+                }
+                
+                // Unlock toast notification
+                if habitManager.showUnlockToast {
+                    VStack {
+                        UnlockToast(message: habitManager.unlockToastMessage)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 10)
+                        Spacer()
+                    }
+                    .allowsHitTesting(false)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(3)
+                }
+                
+                // Celebration popup overlay
+                if habitManager.showCelebrationPopup {
+                    CelebrationPopup(
+                        message: habitManager.celebrationMessage,
+                        isShowing: .constant(habitManager.showCelebrationPopup)
+                    )
+                    .allowsHitTesting(true)
+                    .transition(.opacity)
+                    .zIndex(1)
+                    .onTapGesture {
+                        // Allow dismissing by tapping
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            habitManager.showCelebrationPopup = false
+                        }
+                    }
+                }
+                
+                // Micro-affirmation overlay
+                if habitManager.showMicroAffirmation {
+                    MicroAffirmationView(message: habitManager.microAffirmationMessage)
+                        .allowsHitTesting(false)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .zIndex(2)
+                }
             }
             .navigationBarHidden(true)
         }
         .sheet(isPresented: $showingCustomLadderView) {
             CustomHabitLadderView(habitManager: habitManager)
+                .environmentObject(storeManager)
         }
         .sheet(isPresented: $showingLadderSelection) {
             LadderSelectionView(habitManager: habitManager)
+        }
+        .sheet(isPresented: $showingCuratedLadders) {
+            CuratedLaddersView()
+                .environmentObject(storeManager)
+                .environmentObject(habitManager)
+        }
+        .sheet(isPresented: $showingEndOfDayRecap) {
+            EndOfDayRecapView(habits: habitManager.habits)
         }
         .alert("Reset All Habits", isPresented: $showingResetAlert) {
             Button("Cancel", role: .cancel) { }
@@ -1363,12 +1739,21 @@ struct ContentView: View {
         } message: {
             Text("This will reset all habit progress. Are you sure?")
         }
-        .onChange(of: habitManager.lastUnlockedHabitId) { _, _ in
+        .alert("Upgrade to Premium", isPresented: $showingCustomLadderLimitAlert) {
+            Button("Upgrade") {
+                // TODO: Show premium paywall
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(customLadderLimitMessage)
+        }
+                        .onChange(of: habitManager.lastUnlockedHabitId) { oldValue, newValue in
             // Clear the newly unlocked indicator after animation
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 habitManager.lastUnlockedHabitId = nil
             }
         }
+
     }
     
     private func completeOnboarding() {
@@ -1377,6 +1762,117 @@ struct ContentView: View {
             showOnboarding = false
         }
         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        UserDefaults.standard.set(true, forKey: "hasSelectedProfile")
+    }
+
+}
+
+// MARK: - Empty Habits View
+struct EmptyHabitsView: View {
+    @EnvironmentObject var habitManager: HabitManager
+    @State private var isAnimating = false
+    @State private var showProfileSelection = false
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Icon
+            VStack(spacing: 16) {
+                Image(systemName: "list.clipboard")
+                    .font(.system(size: 60))
+                    .foregroundColor(HabitTheme.secondaryText)
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+                    .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+                
+                Text("No Habits Yet")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(HabitTheme.primaryText)
+            }
+            
+            // Message
+            VStack(spacing: 12) {
+                Text("Your habit journey is just beginning!")
+                    .font(.body)
+                    .foregroundColor(HabitTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+                
+                Text("Choose a starter profile to get your first set of habits.")
+                    .font(.subheadline)
+                    .foregroundColor(HabitTheme.tertiaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 20)
+            
+            // Action button
+            Button(action: {
+                showProfileSelection = true
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.headline)
+                    Text("Choose Profile")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [HabitTheme.primary, HabitTheme.primary.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: HabitTheme.primary.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
+            .padding(.horizontal, 20)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .onAppear {
+            isAnimating = true
+        }
+        .sheet(isPresented: $showProfileSelection) {
+            HabitProfileSelectionView(
+                onProfileSelected: { profile in
+                    habitManager.activateHabitProfile(profile)
+                    showProfileSelection = false
+                },
+                onDismiss: {
+                    showProfileSelection = false
+                }
+            )
+        }
+    }
+}
+
+// MARK: - Reusable Footer Component
+struct AppFooter: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Built by")
+                    .font(.caption)
+                    .foregroundColor(HabitTheme.secondaryText)
+                
+                Button(action: {
+                    if let url = URL(string: "https://blackcubesolutions.com") {
+                        UIApplication.shared.open(url)
+                    }
+                }) {
+                    Image("BCSLogo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 20)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 20)
+        .padding(.top, 16)
     }
 }
 
@@ -1386,78 +1882,48 @@ struct LadderSelectionView: View {
     @ObservedObject var habitManager: HabitManager
     @State private var showingDeleteAlert = false
     @State private var ladderToDelete: CustomHabitLadder?
+    @State private var showingRenameAlert = false
+    @State private var ladderToRename: CustomHabitLadder?
+    @State private var newLadderName = ""
+    @State private var isSelectionMode = false
+    @State private var selectedLadders: Set<UUID> = []
+    @State private var showingDeleteSelectedAlert = false
+    @State private var showingProfileSelection = false
     
     var body: some View {
-        NavigationView {
-            List {
-                // Default ladder option
-                Button(action: {
-                    habitManager.switchToDefaultHabits()
-                    dismiss()
-                }) {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("Default Ladder")
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            Text("8 built-in habits")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        if habitManager.activeCustomLadder == nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                }
+        NavigationStack {
+            ZStack {
+                // Modern background
+                HabitTheme.backgroundPrimary
+                    .ignoresSafeArea()
                 
-                // Custom ladders
-                ForEach(habitManager.customLadders) { ladder in
-                    HStack {
-                        Button(action: {
-                            habitManager.activateCustomLadder(ladder)
-                            dismiss()
-                        }) {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(ladder.name)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    Text("\(ladder.habits.count) habits")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                if habitManager.activeCustomLadder?.id == ladder.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        }
+                ScrollView {
+                    VStack(spacing: 16) {
+                        headerView
                         
-                        Button(action: {
-                            ladderToDelete = ladder
-                            showingDeleteAlert = true
-                        }) {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
+                        VStack(spacing: 12) {
+                            defaultLadderCard
+                            customLaddersSection
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 20)
+                        
+                        // Footer at bottom of scrollable content
+                        AppFooter()
+                        
+                        // Bottom spacing for safe area
+                        Color.clear.frame(height: 20)
                     }
                 }
             }
-            .navigationTitle("Select Ladder")
+            .navigationTitle("🪜 Select Ladder")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    leadingToolbarButton
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
+                    trailingToolbarButton
                 }
             }
         }
@@ -1471,6 +1937,372 @@ struct LadderSelectionView: View {
         } message: {
             Text("Are you sure you want to delete this custom ladder?")
         }
+        .alert("Rename Ladder", isPresented: $showingRenameAlert) {
+            TextField("Ladder Name", text: $newLadderName)
+                .textInputAutocapitalization(.words)
+            Button("Cancel", role: .cancel) {
+                newLadderName = ""
+                ladderToRename = nil
+            }
+            Button("Save") {
+                if let ladder = ladderToRename,
+                   !newLadderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    habitManager.renameCustomLadder(ladder, to: newLadderName.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                newLadderName = ""
+                ladderToRename = nil
+            }
+            .disabled(newLadderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("Enter a new name for your custom ladder")
+        }
+        .alert("Delete Selected Ladders", isPresented: $showingDeleteSelectedAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteSelectedLadders()
+            }
+        } message: {
+            Text("Are you sure you want to delete \(selectedLadders.count) selected ladder\(selectedLadders.count == 1 ? "" : "s")?")
+        }
+        .sheet(isPresented: $showingProfileSelection) {
+            HabitProfileSelectionView(
+                onProfileSelected: { profile in
+                    habitManager.activateHabitProfile(profile)
+                    showingProfileSelection = false
+                    dismiss() // Also dismiss the ladder selection view
+                },
+                onDismiss: {
+                    showingProfileSelection = false
+                }
+            )
+        }
+        .onChange(of: habitManager.customLadders) { oldValue, newValue in
+            // Exit selection mode if in selection mode and ladders list changes
+            if isSelectionMode {
+                isSelectionMode = false
+                selectedLadders.removeAll()
+            }
+        }
+    }
+    
+    // MARK: - Computed Views
+    private var headerView: some View {
+        VStack(spacing: 8) {
+            Text("🪜")
+                .font(.system(size: 60))
+            Text("Choose Your Ladder")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(HabitTheme.primaryText)
+            Text("Switch between different habit ladders")
+                .font(.subheadline)
+                .foregroundColor(HabitTheme.secondaryText)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 20)
+        .padding(.horizontal, 20)
+    }
+    
+    private var defaultLadderCard: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                habitManager.switchToDefaultLadder()
+            }
+            dismiss()
+        }) {
+            HStack(spacing: 16) {
+                // Ladder icon
+                VStack {
+                    Text(habitManager.defaultLadder?.emoji ?? "🏠")
+                        .font(.title)
+                    Text("Default")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(HabitTheme.secondaryText)
+                }
+                .frame(width: 60)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(habitManager.defaultLadder?.name ?? "Default Ladder")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HabitTheme.primaryText)
+                    Text("\(habitManager.defaultLadder?.habits.count ?? 0) habits")
+                        .font(.subheadline)
+                        .foregroundColor(HabitTheme.secondaryText)
+                }
+                
+                Spacer()
+                
+                if habitManager.activeCustomLadder == nil {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.blue)
+                        .font(.title2)
+                } else {
+                    Image(systemName: "circle")
+                        .foregroundColor(HabitTheme.inactive)
+                        .font(.title2)
+                }
+            }
+            .padding(20)
+            .background(defaultLadderBackground)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var defaultLadderBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(HabitTheme.cardBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(
+                        habitManager.activeCustomLadder == nil ? 
+                        Color.blue.opacity(0.4) : 
+                        HabitTheme.inactive.opacity(0.3), 
+                        lineWidth: habitManager.activeCustomLadder == nil ? 2 : 1
+                    )
+            )
+            .shadow(
+                color: habitManager.activeCustomLadder == nil ? 
+                Color.blue.opacity(0.15) : 
+                .black.opacity(0.05),
+                radius: habitManager.activeCustomLadder == nil ? 8 : 4,
+                x: 0,
+                y: 4
+            )
+    }
+    
+    private var customLaddersSection: some View {
+        ForEach(habitManager.customLadders) { ladder in
+            customLadderCard(ladder: ladder)
+        }
+    }
+    
+    @ViewBuilder
+    private func customLadderCard(ladder: CustomHabitLadder) -> some View {
+        Button(action: {
+            if isSelectionMode {
+                if selectedLadders.contains(ladder.id) {
+                    selectedLadders.remove(ladder.id)
+                } else {
+                    selectedLadders.insert(ladder.id)
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    habitManager.activateCustomLadder(ladder)
+                }
+                dismiss()
+            }
+        }) {
+            HStack(spacing: 16) {
+                // Selection indicator in selection mode
+                if isSelectionMode {
+                    Image(systemName: selectedLadders.contains(ladder.id) ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(selectedLadders.contains(ladder.id) ? .blue : HabitTheme.inactive)
+                        .font(.title2)
+                        .animation(.easeInOut(duration: 0.2), value: selectedLadders.contains(ladder.id))
+                }
+                
+                // Custom ladder icon
+                VStack {
+                    Text(ladder.emoji ?? "🪜")
+                        .font(.title)
+                    Text("Custom")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(HabitTheme.secondaryText)
+                }
+                .frame(width: 60)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ladder.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(HabitTheme.primaryText)
+                    Text("\(ladder.habits.count) habits")
+                        .font(.subheadline)
+                        .foregroundColor(HabitTheme.secondaryText)
+                }
+                
+                Spacer()
+                
+                // Active indicator (only shown when not in selection mode)
+                if !isSelectionMode {
+                    if habitManager.activeCustomLadder?.id == ladder.id {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.title2)
+                    } else {
+                        Image(systemName: "circle")
+                            .foregroundColor(HabitTheme.inactive)
+                            .font(.title2)
+                    }
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if !isSelectionMode {
+                Button {
+                    ladderToRename = ladder
+                    newLadderName = ladder.name
+                    showingRenameAlert = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                .tint(.blue)
+                
+                Button(role: .destructive) {
+                    ladderToDelete = ladder
+                    showingDeleteAlert = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .contextMenu {
+            if !isSelectionMode {
+                Button {
+                    ladderToRename = ladder
+                    newLadderName = ladder.name
+                    showingRenameAlert = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                
+                Button(role: .destructive) {
+                    ladderToDelete = ladder
+                    showingDeleteAlert = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .background(customLadderBackground(ladder: ladder))
+    }
+    
+    @ViewBuilder
+    private func customLadderBackground(ladder: CustomHabitLadder) -> some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(getCardBackgroundColor(ladder: ladder))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(
+                        getCardBorderColor(ladder: ladder), 
+                        lineWidth: getCardBorderWidth(ladder: ladder)
+                    )
+            )
+            .shadow(
+                color: getCardShadowColor(ladder: ladder),
+                radius: getCardShadowRadius(ladder: ladder),
+                x: 0,
+                y: 4
+            )
+    }
+    
+    @ViewBuilder
+    private var leadingToolbarButton: some View {
+        if !habitManager.customLadders.isEmpty {
+            if isSelectionMode {
+                Button("Cancel") {
+                    isSelectionMode = false
+                    selectedLadders.removeAll()
+                }
+            } else {
+                Button("Select") {
+                    isSelectionMode = true
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var trailingToolbarButton: some View {
+        if isSelectionMode {
+            Button("Delete") {
+                showingDeleteSelectedAlert = true
+            }
+            .disabled(selectedLadders.isEmpty)
+            .foregroundColor(selectedLadders.isEmpty ? .gray : .red)
+            .fontWeight(.semibold)
+        } else {
+            Button("Done") {
+                dismiss()
+            }
+            .fontWeight(.semibold)
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func getCardBackgroundColor(ladder: CustomHabitLadder) -> Color {
+        if isSelectionMode && selectedLadders.contains(ladder.id) {
+            return Color.blue.opacity(0.1)
+        } else if habitManager.activeCustomLadder?.id == ladder.id {
+            return HabitTheme.cardBackground
+        } else {
+            return HabitTheme.cardBackground
+        }
+    }
+    
+    private func getCardBorderColor(ladder: CustomHabitLadder) -> Color {
+        if isSelectionMode && selectedLadders.contains(ladder.id) {
+            return Color.blue.opacity(0.5)
+        } else if habitManager.activeCustomLadder?.id == ladder.id {
+            return Color.blue.opacity(0.4)
+        } else {
+            return HabitTheme.inactive.opacity(0.3)
+        }
+    }
+    
+    private func getCardBorderWidth(ladder: CustomHabitLadder) -> CGFloat {
+        if isSelectionMode && selectedLadders.contains(ladder.id) {
+            return 2
+        } else if habitManager.activeCustomLadder?.id == ladder.id {
+            return 2
+        } else {
+            return 1
+        }
+    }
+    
+    private func getCardShadowColor(ladder: CustomHabitLadder) -> Color {
+        if isSelectionMode && selectedLadders.contains(ladder.id) {
+            return Color.blue.opacity(0.2)
+        } else if habitManager.activeCustomLadder?.id == ladder.id {
+            return Color.blue.opacity(0.15)
+        } else {
+            return .black.opacity(0.05)
+        }
+    }
+    
+    private func getCardShadowRadius(ladder: CustomHabitLadder) -> CGFloat {
+        if isSelectionMode && selectedLadders.contains(ladder.id) {
+            return 8
+        } else if habitManager.activeCustomLadder?.id == ladder.id {
+            return 8
+        } else {
+            return 4
+        }
+    }
+    
+    private func deleteSelectedLadders() {
+        let laddersToDelete = habitManager.customLadders.filter { selectedLadders.contains($0.id) }
+        
+        for ladder in laddersToDelete {
+            habitManager.deleteCustomLadder(ladder)
+        }
+        
+        // Check if all custom ladders were deleted
+        if habitManager.customLadders.isEmpty {
+            // Switch back to default ladder and show profile selection
+            habitManager.switchToDefaultLadder()
+            showingProfileSelection = true
+        }
+        
+        // Exit selection mode
+        isSelectionMode = false
+        selectedLadders.removeAll()
     }
 }
 
@@ -1484,6 +2316,9 @@ struct HabitRow: View {
     
     @State private var isPressed = false
     @State private var completionScale: CGFloat = 1.0
+    @State private var glowOpacity: Double = 0
+    @State private var unlockScale: CGFloat = 1.0
+    @State private var showDescription = false
     
     private var cardBackgroundColor: Color {
         if habit.isUnlocked {
@@ -1532,12 +2367,15 @@ struct HabitRow: View {
                         .multilineTextAlignment(.leading)
                         .animation(.easeInOut(duration: 0.3), value: habit.isUnlocked)
                     
-                    // Description
-                    Text(habit.description)
-                        .font(.subheadline)
-                        .foregroundColor(HabitTheme.secondaryText)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                    // Description (conditional display)
+                    if showDescription {
+                        Text(habit.description)
+                            .font(.subheadline)
+                            .foregroundColor(HabitTheme.secondaryText)
+                            .lineLimit(nil)
+                            .multilineTextAlignment(.leading)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
                 
                 Spacer()
@@ -1545,12 +2383,68 @@ struct HabitRow: View {
                 // Unlock animation or lock icon
                 if habit.isUnlocked {
                     if isNewlyUnlocked {
-                        Image(systemName: "sparkles")
+                        ZStack {
+                            // Glowing background
+                            Circle()
+                                .fill(
+                                    RadialGradient(
+                                        colors: [
+                                            Color.yellow.opacity(glowOpacity),
+                                            Color.orange.opacity(glowOpacity * 0.6),
+                                            Color.clear
+                                        ],
+                                        center: .center,
+                                        startRadius: 5,
+                                        endRadius: 25
+                                    )
+                                )
+                                .frame(width: 50, height: 50)
+                            
+                            // Main unlock icon
+                            Image(systemName: "lock.open.fill")
+                                .font(.title2)
+                                .foregroundColor(.yellow)
+                                .scaleEffect(unlockScale)
+                                .shadow(color: .yellow.opacity(0.6), radius: 8, x: 0, y: 2)
+                            
+                            // Floating sparkles
+                            Image(systemName: "sparkles")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .offset(x: 15, y: -10)
+                                .scaleEffect(0.8)
+                                .opacity(glowOpacity)
+                                .rotationEffect(.degrees(45))
+                            
+                            Image(systemName: "sparkles")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                                .offset(x: -12, y: 8)
+                                .scaleEffect(0.6)
+                                .opacity(glowOpacity * 0.8)
+                                .rotationEffect(.degrees(-30))
+                        }
+                        .onAppear {
+                            // Pulsing glow animation
+                            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                                glowOpacity = 0.8
+                            }
+                            
+                            // Scale bounce animation
+                            withAnimation(.spring(response: 0.6, dampingFraction: 0.4)) {
+                                unlockScale = 1.3
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                                    unlockScale = 1.0
+                                }
+                            }
+                        }
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
                             .font(.title2)
-                            .foregroundColor(.yellow)
-                            .scaleEffect(1.2)
-                            .rotationEffect(.degrees(360))
-                            .animation(.spring(response: 0.8, dampingFraction: 0.6), value: isNewlyUnlocked)
+                            .foregroundColor(.green)
+                            .scaleEffect(0.9)
                     }
                 } else {
                     Image(systemName: "lock.fill")
@@ -1563,7 +2457,7 @@ struct HabitRow: View {
             
             // Progress indicator section
             VStack(spacing: 12) {
-                // Progress circles
+                // Progress bar
                 HStack(spacing: 12) {
                     Text("Progress")
                         .font(.caption)
@@ -1572,42 +2466,32 @@ struct HabitRow: View {
                     
                     Spacer()
                     
-                    HStack(spacing: 8) {
-                        ForEach(0..<3, id: \.self) { i in
-                            Circle()
-                                .fill(
-                                    habit.isUnlocked && i < habit.consecutiveStreakCount ? 
-                                    Color.green : 
-                                    HabitTheme.tertiaryText.opacity(0.3)
-                                )
-                                .frame(width: 16, height: 16)
-                                .overlay(
-                                    Circle()
-                                        .stroke(
-                                            habit.isUnlocked && i < habit.consecutiveStreakCount ? 
-                                            Color.green.opacity(0.4) : 
-                                            HabitTheme.tertiaryText.opacity(0.5), 
-                                            lineWidth: 1
-                                        )
-                                )
-                                .scaleEffect(habit.isUnlocked && i < habit.consecutiveStreakCount ? 1.2 : 1.0)
-                                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: habit.consecutiveStreakCount)
-                                .shadow(
-                                    color: habit.isUnlocked && i < habit.consecutiveStreakCount ? Color.green.opacity(0.3) : .clear,
-                                    radius: 4,
-                                    x: 0,
-                                    y: 2
-                                )
-                        }
+                    // Simple progress bar
+                    ZStack(alignment: .leading) {
+                        // Background track
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(HabitTheme.tertiaryText.opacity(0.2))
+                            .frame(height: 8)
+                        
+                        // Progress fill
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(
+                                habit.hasThreeConsecutiveCompletions ? 
+                                LinearGradient(colors: [HabitTheme.gold, .yellow], startPoint: .leading, endPoint: .trailing) :
+                                LinearGradient(colors: [.green, .green], startPoint: .leading, endPoint: .trailing)
+                            )
+                            .frame(width: max(0, CGFloat(habit.isUnlocked ? habit.consecutiveStreakCount : 0) / 3.0 * 60), height: 8)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: habit.consecutiveStreakCount)
                     }
+                    .frame(width: 60)
                     
                     Text("\(habit.isUnlocked ? habit.consecutiveStreakCount : 0)/3")
                         .font(.caption)
-                        .foregroundColor(habit.hasThreeConsecutiveCompletions ? .green : HabitTheme.secondaryText)
+                        .foregroundColor(habit.hasThreeConsecutiveCompletions ? .green : (habit.consecutiveStreakCount > 0 ? .blue : HabitTheme.secondaryText))
                         .fontWeight(.semibold)
                         .monospacedDigit()
-                        .scaleEffect(habit.hasThreeConsecutiveCompletions ? 1.1 : 1.0)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: habit.hasThreeConsecutiveCompletions)
+                        .scaleEffect(habit.hasThreeConsecutiveCompletions ? 1.1 : (habit.consecutiveStreakCount > 0 ? 1.05 : 1.0))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: habit.consecutiveStreakCount)
                 }
                 
                 // Status and unlock information
@@ -1723,7 +2607,7 @@ struct HabitRow: View {
                                         Color.blue.opacity(0.15),
                                     radius: 6,
                                     x: 0,
-                                    y: 3
+                                    y: .init(3)
                                 )
                         )
                     }
@@ -1761,26 +2645,838 @@ struct HabitRow: View {
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(cardBackgroundColor)
-                .overlay(
+            ZStack {
+                // Base card
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(cardBackgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(cardBorderColor, lineWidth: 1.5)
+                    )
+                    .shadow(
+                        color: shadowColor,
+                        radius: shadowRadius,
+                        x: 0,
+                        y: habit.isUnlocked ? 6 : 2
+                    )
+                
+                // Enhanced glow for newly unlocked habits
+                if isNewlyUnlocked {
                     RoundedRectangle(cornerRadius: 20)
-                        .stroke(cardBorderColor, lineWidth: 1.5)
-                )
-                .shadow(
-                    color: shadowColor,
-                    radius: shadowRadius,
-                    x: 0,
-                    y: habit.isUnlocked ? 6 : 2
-                )
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.yellow.opacity(glowOpacity * 0.8),
+                                    Color.orange.opacity(glowOpacity * 0.5),
+                                    Color.yellow.opacity(glowOpacity * 0.3)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 3
+                        )
+                        .shadow(
+                            color: Color.yellow.opacity(glowOpacity * 0.6),
+                            radius: 15,
+                            x: 0,
+                            y: 0
+                        )
+                        .shadow(
+                            color: Color.orange.opacity(glowOpacity * 0.4),
+                            radius: 25,
+                            x: 0,
+                            y: 0
+                        )
+                }
+            }
         )
-        .scaleEffect(habit.isUnlocked ? (isNewlyUnlocked ? 1.05 : 1.0) : 0.96)
+        .scaleEffect(habit.isUnlocked ? (isNewlyUnlocked ? 1.02 : 1.0) : 0.96)
         .opacity(habit.isUnlocked ? 1.0 : 0.7)
         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: habit.isUnlocked)
         .animation(.spring(response: 0.8, dampingFraction: 0.7), value: isNewlyUnlocked)
+        .onTapGesture {
+            // Toggle description visibility on tap
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showDescription.toggle()
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            // Also toggle description on long press
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showDescription.toggle()
+            }
+        }
+    }
+}
+
+// MARK: - Custom Habit Ladder View
+struct CustomHabitLadderView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var habitManager: HabitManager
+    @EnvironmentObject var storeManager: StoreManager
+    
+    @State private var ladderName = ""
+    @State private var selectedEmoji = "🪜"
+    @State private var habits: [NewHabit] = [NewHabit()]
+    @State private var showingError = false
+    @State private var errorMessage = ""
+    @State private var showingEmojiPicker = false
+    
+    private let availableEmojis = ["🪜", "🎯", "🚀", "💪", "⭐", "🔥", "🌟", "💎", "🏆", "🎖️", "🎨", "📚", "🧘", "🏃", "💡", "🌅", "🌱", "⚡", "🎵", "🔑", "🎭", "🧩", "🎳", "🎪", "🎨", "🎺", "🎸", "🎮", "🎲"]
+    
+    private struct NewHabit: Identifiable {
+        let id = UUID()
+        var name = ""
+        var description = ""
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                // Modern background
+                HabitTheme.backgroundPrimary
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Ladder Details")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(HabitTheme.primaryText)
+                            
+                            TextField("Enter ladder name", text: $ladderName)
+                                .textFieldStyle(ModernLargeTextFieldStyle())
+                            
+                            // Emoji Selection (Premium Feature)
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("Ladder Icon")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(HabitTheme.primaryText)
+                                    
+                                    if !storeManager.isPremiumUser {
+                                        Image(systemName: "crown.fill")
+                                            .foregroundColor(.yellow)
+                                            .font(.caption)
+                                    }
+                                }
+                                
+                                if storeManager.isPremiumUser {
+                                    Button(action: { showingEmojiPicker = true }) {
+                                        HStack(spacing: 12) {
+                                            Text(selectedEmoji)
+                                                .font(.title)
+                                            Text("Tap to change")
+                                                .font(.subheadline)
+                                                .foregroundColor(.blue)
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .foregroundColor(.blue)
+                                                .font(.caption)
+                                        }
+                                        .padding()
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(HabitTheme.cardBackground)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(.blue.opacity(0.3), lineWidth: 1)
+                                                )
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    HStack(spacing: 12) {
+                                        Text("🪜")
+                                            .font(.title)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Premium Feature")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(HabitTheme.primaryText)
+                                            Text("Upgrade to choose custom icons")
+                                                .font(.caption)
+                                                .foregroundColor(HabitTheme.secondaryText)
+                                        }
+                                        Spacer()
+                                        Button("Upgrade") {
+                                            // TODO: Show premium upgrade view
+                                        }
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(.blue)
+                                        .cornerRadius(8)
+                                    }
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(HabitTheme.cardBackground)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(.gray.opacity(0.3), lineWidth: 1)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        
+                        // Habits Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Habits (in order of difficulty)")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(HabitTheme.primaryText)
+                                .padding(.horizontal, 20)
+                            
+                            ForEach(habits.indices, id: \.self) { index in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Text("\(index + 1).")
+                                            .font(.headline)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.blue)
+                                            .frame(width: 24, alignment: .leading)
+                                        
+                                        Text("Habit \(index + 1)")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(HabitTheme.primaryText)
+                                        
+                                        Spacer()
+                                        
+                                        if habits.count > 1 {
+                                            Button(action: {
+                                                deleteHabit(at: IndexSet(integer: index))
+                                            }) {
+                                                Image(systemName: "trash")
+                                                    .foregroundColor(.red)
+                                                    .font(.caption)
+                                            }
+                                        }
+                                    }
+                                    
+                                    VStack(spacing: 8) {
+                                        TextField("Habit name", text: $habits[index].name)
+                                            .textFieldStyle(ModernTextFieldStyle())
+                                        
+                                        TextField("Description (optional)", text: $habits[index].description)
+                                            .textFieldStyle(ModernTextFieldStyle())
+                                    }
+                                }
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(HabitTheme.cardBackground)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(HabitTheme.inactive.opacity(0.3), lineWidth: 1)
+                                        )
+                                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                                )
+                                .padding(.horizontal, 20)
+                            }
+                            
+                            // Add habit button
+                            Button(action: addHabit) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.title3)
+                                    Text("Add Another Habit")
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.blue)
+                                .padding(.vertical, 16)
+                                .padding(.horizontal, 20)
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(.blue.opacity(0.08))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(.blue.opacity(0.3), lineWidth: 1.5)
+                                        )
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        // Bottom spacing
+                        Color.clear.frame(height: 100)
+                    }
+                }
+            }
+            .navigationTitle("Create Custom Ladder")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveCustomLadder()
+                    }
+                    .disabled(!isValidLadder)
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .sheet(isPresented: $showingEmojiPicker) {
+            EmojiPickerView(selectedEmoji: $selectedEmoji, availableEmojis: availableEmojis)
+        }
+        .alert("Error", isPresented: $showingError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
+    }
+    
+    private var isValidLadder: Bool {
+        !ladderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        habits.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count >= 1
+    }
+    
+    private func addHabit() {
+        habits.append(NewHabit())
+    }
+    
+    private func deleteHabit(at offsets: IndexSet) {
+        if habits.count > 1 {
+            habits.remove(atOffsets: offsets)
+        }
+    }
+    
+    private func saveCustomLadder() {
+        let trimmedName = ladderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let validHabits = habits.filter { 
+            !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty 
+        }
+        
+        guard !trimmedName.isEmpty else {
+            errorMessage = "Please enter a ladder name."
+            showingError = true
+            return
+        }
+        
+        guard validHabits.count >= 1 else {
+            errorMessage = "Please add at least one habit."
+            showingError = true
+            return
+        }
+        
+        let habitModels = validHabits.map { habit in
+            Habit(
+                name: habit.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                description: habit.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 
+                    habit.name.trimmingCharacters(in: .whitespacesAndNewlines) : 
+                    habit.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+        
+        let customLadder = CustomHabitLadder(
+            name: trimmedName,
+            habits: habitModels,
+            emoji: storeManager.isPremiumUser ? selectedEmoji : nil
+        )
+        
+        habitManager.addCustomLadder(customLadder)
+        dismiss()
+    }
+}
+
+// MARK: - Emoji Picker View
+struct EmojiPickerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedEmoji: String
+    let availableEmojis: [String]
+    
+    let columns = Array(repeating: GridItem(.flexible()), count: 6)
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(availableEmojis, id: \.self) { emoji in
+                        Button(action: {
+                            selectedEmoji = emoji
+                            dismiss()
+                        }) {
+                            Text(emoji)
+                                .font(.largeTitle)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(selectedEmoji == emoji ? .blue.opacity(0.2) : .clear)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(selectedEmoji == emoji ? .blue : .clear, lineWidth: 2)
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Choose Icon")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - End of Day Recap View
+struct EndOfDayRecapView: View {
+    @Environment(\.dismiss) private var dismiss
+    let habits: [Habit]
+    
+    private var habitsCompletedToday: [Habit] {
+        habits.filter { $0.isCompletedToday }
+    }
+    
+    private var habitsNotCompletedToday: [Habit] {
+        habits.filter { !$0.isCompletedToday }
+    }
+    
+    private var completionRate: String {
+        let completed = habitsCompletedToday.count
+        let total = habits.count
+        return "\(completed) out of \(total)"
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [HabitTheme.backgroundPrimary, HabitTheme.backgroundSecondary],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 12) {
+                            Text("🌅")
+                                .font(.system(size: 60))
+                                .scaleEffect(1.1)
+                                .padding(.top, 20)
+                            
+                            Text("Daily Recap")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(HabitTheme.primaryText)
+                            
+                            Text("How did your day go?")
+                                .font(.headline)
+                                .foregroundColor(HabitTheme.secondaryText)
+                        }
+                        
+                        // Completion summary card
+                        VStack(spacing: 16) {
+                            HStack(spacing: 16) {
+                                Circle()
+                                    .fill(habitsCompletedToday.count > habitsNotCompletedToday.count ? 
+                                          HabitTheme.success : HabitTheme.warning)
+                                    .frame(width: 60, height: 60)
+                                    .overlay(
+                                        Text("\(habitsCompletedToday.count)")
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Habits Completed")
+                                        .font(.headline)
+                                        .foregroundColor(HabitTheme.primaryText)
+                                    
+                                    Text(completionRate + " habits completed")
+                                        .font(.subheadline)
+                                        .foregroundColor(HabitTheme.secondaryText)
+                                    
+                                    // Progress bar
+                                    GeometryReader { geometry in
+                                        ZStack(alignment: .leading) {
+                                            Rectangle()
+                                                .fill(HabitTheme.inactive.opacity(0.3))
+                                                .frame(height: 6)
+                                                .cornerRadius(3)
+                                            
+                                            Rectangle()
+                                                .fill(habitsCompletedToday.count > habitsNotCompletedToday.count ? 
+                                                      HabitTheme.success : HabitTheme.warning)
+                                                .frame(
+                                                    width: habits.isEmpty ? 0 : 
+                                                        geometry.size.width * CGFloat(habitsCompletedToday.count) / CGFloat(habits.count),
+                                                    height: 6
+                                                )
+                                                .cornerRadius(3)
+                                        }
+                                    }
+                                    .frame(height: 6)
+                                }
+                                
+                                Spacer()
+                            }
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(HabitTheme.cardBackground)
+                                .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
+                        )
+                        .padding(.horizontal, 20)
+                        
+                        // Completed habits section
+                        if !habitsCompletedToday.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("✅ Completed Today")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(HabitTheme.success)
+                                    Spacer()
+                                }
+                                
+                                ForEach(habitsCompletedToday, id: \.id) { habit in
+                                    HStack(spacing: 12) {
+                                        Circle()
+                                            .fill(HabitTheme.success)
+                                            .frame(width: 8, height: 8)
+                                        
+                                        Text(habit.name)
+                                            .font(.body)
+                                            .foregroundColor(HabitTheme.primaryText)
+                                        
+                                        Spacer()
+                                        
+                                        Text("✅")
+                                            .font(.body)
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                            .padding(20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(HabitTheme.success.opacity(0.05))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(HabitTheme.success.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // Not completed habits section
+                        if !habitsNotCompletedToday.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("❌ Not Completed Today")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(HabitTheme.warning)
+                                    Spacer()
+                                }
+                                
+                                ForEach(habitsNotCompletedToday, id: \.id) { habit in
+                                    HStack(spacing: 12) {
+                                        Circle()
+                                            .fill(HabitTheme.warning)
+                                            .frame(width: 8, height: 8)
+                                        
+                                        Text(habit.name)
+                                            .font(.body)
+                                            .foregroundColor(HabitTheme.primaryText)
+                                        
+                                        Spacer()
+                                        
+                                        Text("❌")
+                                            .font(.body)
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                            .padding(20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(HabitTheme.warning.opacity(0.05))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(HabitTheme.warning.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // Motivational message
+                        VStack(spacing: 8) {
+                            Text(motivationalMessage)
+                                .font(.body)
+                                .foregroundColor(HabitTheme.secondaryText)
+                                .multilineTextAlignment(.center)
+                                .italic()
+                            
+                            Text("Keep building those habits! 💪")
+                                .font(.caption)
+                                .foregroundColor(HabitTheme.secondaryText)
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(HabitTheme.cardBackground.opacity(0.5))
+                        )
+                        .padding(.horizontal, 20)
+                        
+                        // Bottom spacing
+                        Color.clear.frame(height: 40)
+                    }
+                }
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+    
+    private var motivationalMessage: String {
+        let completionPercentage = habits.isEmpty ? 0 : (Double(habitsCompletedToday.count) / Double(habits.count))
+        
+        switch completionPercentage {
+        case 1.0:
+            return "Perfect day! You completed all your habits. You're unstoppable! 🌟"
+        case 0.8...0.99:
+            return "Amazing work! You're so close to a perfect day. Keep it up! 🚀"
+        case 0.6...0.79:
+            return "Great progress today! You're building strong momentum. 💪"
+        case 0.4...0.59:
+            return "Good effort today! Every habit counts toward your goals. 📈"
+        case 0.2...0.39:
+            return "Tomorrow is a fresh start! Small steps lead to big changes. 🌱"
+        case 0.01...0.19:
+            return "Every journey starts with a single step. You've got this! ✨"
+        default:
+            return "Tomorrow is a new opportunity to build great habits! 🌅"
+        }
     }
 }
 
 #Preview {
     ContentView()
+}
+
+// MARK: - Unlock Toast View
+struct UnlockToast: View {
+    let message: String
+    @State private var offsetY: CGFloat = -100
+    @State private var opacity: Double = 0
+    @State private var scale: CGFloat = 0.8
+    @State private var sparkleOffset: CGFloat = 0
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Animated unlock icon
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.yellow, Color.orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 40, height: 40)
+                    .shadow(color: Color.yellow.opacity(0.4), radius: 8, x: 0, y: 2)
+                
+                Image(systemName: "lock.open.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .rotationEffect(.degrees(sparkleOffset * 0.1))
+            }
+            .scaleEffect(scale)
+            
+            // Message text
+            Text(message)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(HabitTheme.primaryText)
+                .lineLimit(2)
+            
+            Spacer()
+            
+            // Sparkle animation
+            Image(systemName: "sparkles")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.yellow)
+                .rotationEffect(.degrees(sparkleOffset))
+                .scaleEffect(1.0 + sin(sparkleOffset * .pi / 180) * 0.2)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(HabitTheme.cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.yellow.opacity(0.6), Color.orange.opacity(0.4)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 2
+                        )
+                )
+                .shadow(
+                    color: Color.yellow.opacity(0.3),
+                    radius: 12,
+                    x: 0,
+                    y: 4
+                )
+        )
+        .offset(y: offsetY)
+        .opacity(opacity)
+        .scaleEffect(scale)
+        .onAppear {
+            // Entry animation
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.8, blendDuration: 0.2)) {
+                offsetY = 0
+                opacity = 1
+                scale = 1.0
+            }
+            
+            // Continuous sparkle animation
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: false)) {
+                sparkleOffset = 360
+            }
+        }
+    }
+}
+
+// MARK: - Sparkle Animation Component
+struct SparkleAnimation: View {
+    @State private var sparkles: [SparkleParticle] = []
+    @State private var animationTimer: Timer?
+    
+    private struct SparkleParticle: Identifiable {
+        let id = UUID()
+        var x: CGFloat
+        var y: CGFloat
+        var scale: CGFloat
+        var opacity: Double
+        var rotation: Double
+        var color: Color
+        var velocity: CGPoint
+    }
+    
+    var body: some View {
+        ZStack {
+            ForEach(sparkles) { sparkle in
+                Image(systemName: Bool.random() ? "sparkles" : "star.fill")
+                    .font(.system(size: 12 + sparkle.scale * 8, weight: .medium))
+                    .foregroundColor(sparkle.color)
+                    .opacity(sparkle.opacity)
+                    .scaleEffect(sparkle.scale)
+                    .rotationEffect(.degrees(sparkle.rotation))
+                    .position(x: sparkle.x, y: sparkle.y)
+            }
+        }
+        .onAppear {
+            startSparkleAnimation()
+        }
+        .onDisappear {
+            stopSparkleAnimation()
+        }
+    }
+    
+    private func startSparkleAnimation() {
+        // Create initial sparkles
+        createSparkles()
+        
+        // Start animation timer
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            updateSparkles()
+        }
+    }
+    
+    private func stopSparkleAnimation() {
+        animationTimer?.invalidate()
+        animationTimer = nil
+        sparkles.removeAll()
+    }
+    
+    private func createSparkles() {
+        for _ in 0..<20 {
+            let sparkle = SparkleParticle(
+                x: CGFloat.random(in: 50...300),
+                y: CGFloat.random(in: 100...600),
+                scale: CGFloat.random(in: 0.5...1.5),
+                opacity: Double.random(in: 0.6...1.0),
+                rotation: Double.random(in: 0...360),
+                color: [Color.yellow, Color.orange, Color.white, Color.cyan].randomElement()!,
+                velocity: CGPoint(
+                    x: CGFloat.random(in: -2...2),
+                    y: CGFloat.random(in: -4...1)
+                )
+            )
+            sparkles.append(sparkle)
+        }
+    }
+    
+    private func updateSparkles() {
+        withAnimation(.easeInOut(duration: 0.1)) {
+            for i in 0..<sparkles.count {
+                sparkles[i].x += sparkles[i].velocity.x
+                sparkles[i].y += sparkles[i].velocity.y
+                sparkles[i].rotation += Double.random(in: -5...5)
+                sparkles[i].opacity *= 0.98
+                sparkles[i].scale *= 0.99
+                
+                // Remove faded sparkles and add new ones
+                if sparkles[i].opacity < 0.1 || sparkles[i].y > 700 {
+                    sparkles[i] = SparkleParticle(
+                        x: CGFloat.random(in: 50...300),
+                        y: CGFloat.random(in: -50...100),
+                        scale: CGFloat.random(in: 0.5...1.5),
+                        opacity: Double.random(in: 0.6...1.0),
+                        rotation: Double.random(in: 0...360),
+                        color: [Color.yellow, Color.orange, Color.white, Color.cyan].randomElement()!,
+                        velocity: CGPoint(
+                            x: CGFloat.random(in: -2...2),
+                            y: CGFloat.random(in: -4...1)
+                        )
+                    )
+                }
+            }
+        }
+    }
 }
