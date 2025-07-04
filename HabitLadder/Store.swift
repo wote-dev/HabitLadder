@@ -23,9 +23,13 @@ class StoreManager: ObservableObject {
         curatedLadders = createCuratedLadders()
         taskHandle = listenForTransactions()
         
-        Task {
-            await retrieveProducts()
-            await updatePurchaseStatus()
+        Task { @MainActor in
+            // Load products and status in parallel for better performance
+            async let productsTask = retrieveProducts()
+            async let statusTask = updatePurchaseStatus()
+            
+            await productsTask
+            await statusTask
             
             #if DEBUG
             print("🔍 Available products: \(products.map { $0.id })")
@@ -240,4 +244,4 @@ extension CuratedHabitLadder {
             objc_setAssociatedObject(self, &Self._priceKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
-} 
+}

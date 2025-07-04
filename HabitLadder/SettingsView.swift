@@ -14,7 +14,7 @@ struct SettingsView: View {
     @State private var showingCalendarPermissionAlert = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
                     // Premium Status Section
@@ -52,7 +52,9 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.large)
         }
         .onAppear {
-            notificationManager.checkPermissionStatus()
+            Task {
+                await notificationManager.checkPermissionStatus()
+            }
             calendarManager.updatePermissionStatus()
         }
         .alert("Notification Permission Required", isPresented: $showingNotificationPermissionAlert) {
@@ -610,7 +612,9 @@ struct SettingsView: View {
         }
         
         if newValue && notificationManager.notificationPermissionStatus == .notDetermined {
-            notificationManager.requestPermission()
+            Task {
+                await notificationManager.requestPermission()
+            }
         }
         
         notificationManager.toggleNotifications(for: habitManager.habits, isPremiumUser: storeManager.isPremiumUser)
@@ -706,7 +710,7 @@ struct HabitReminderTimeView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 24) {
                 // Top navigation
                 HStack {
@@ -861,7 +865,7 @@ struct PremiumUpgradeView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
                     // Header
@@ -1236,4 +1240,4 @@ struct PricingCard: View {
         storeManager: StoreManager(),
         habitManager: HabitManager()
     )
-} 
+}

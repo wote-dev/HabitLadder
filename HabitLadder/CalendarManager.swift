@@ -79,12 +79,12 @@ class CalendarManager: ObservableObject {
     func requestCalendarAccess() async -> Bool {
         do {
             let granted = try await eventStore.requestFullAccessToEvents()
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.updatePermissionStatus()
             }
             return granted
         } catch {
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.errorMessage = "Failed to request calendar access: \(error.localizedDescription)"
             }
             return false
@@ -171,7 +171,7 @@ class CalendarManager: ObservableObject {
             try eventStore.saveCalendar(newCalendar, commit: true)
             return newCalendar
         } catch {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.errorMessage = "Failed to create HabitLadder calendar: \(error.localizedDescription)"
             }
             return nil
@@ -302,4 +302,4 @@ class CalendarManager: ObservableObject {
             }
         }
     }
-} 
+}

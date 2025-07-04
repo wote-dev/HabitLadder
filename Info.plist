@@ -22,7 +22,7 @@
 	<true/>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -35,22 +35,36 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Automatic</string>
+	<key>UISupportsDocumentBrowser</key>
+	<false/>
+	<key>NSCalendarsUsageDescription</key>
+	<string>HabitLadder would like to access your calendar to create events for completed habits. This helps you track your progress in your calendar app.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>HabitLadder uses notifications to remind you about your habits and help you stay on track with your goals.</string>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string>BackgroundPrimary</string>
 		<key>UIImageName</key>
 		<string>SplashIcon</string>
-		<key>UIImageRespectsSafeAreaInsets</key>
-		<true/>
-		<key>UILaunchScreenMaintainAspectRatio</key>
-		<true/>
 	</dict>
-	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleDefault</string>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
-	<key>NSCalendarsUsageDescription</key>
-	<string>HabitLadder would like to access your calendar to create events for completed habits. This helps you track your progress in your calendar app.</string>
 </dict>
-</plist> 
+</plist>

@@ -89,7 +89,7 @@ struct HabitProfileSelectionView: View {
     ]
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 // Background
                 LinearGradient(
@@ -393,7 +393,7 @@ struct PaywallView: View {
     @State private var isLoading = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     colors: [Color.purple.opacity(0.1), Color.blue.opacity(0.1)],
@@ -548,4 +548,4 @@ struct FeatureRow: View {
     )
     .environmentObject(StoreManager())
     .environmentObject(HabitManager())
-} 
+}

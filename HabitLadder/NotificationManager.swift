@@ -50,8 +50,10 @@ class NotificationManager: NSObject, ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.saveSettings()
-            print("📱 NotificationManager: Auto-saved settings due to app backgrounding")
+            Task { @MainActor in
+                self?.saveSettings()
+                print("📱 NotificationManager: Auto-saved settings due to app backgrounding")
+            }
         }
         
         // Set up automatic saving when app will terminate
@@ -60,8 +62,10 @@ class NotificationManager: NSObject, ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.saveSettings()
-            print("📱 NotificationManager: Auto-saved settings due to app termination")
+            Task { @MainActor in
+                self?.saveSettings()
+                print("📱 NotificationManager: Auto-saved settings due to app termination")
+            }
         }
     }
     
@@ -79,23 +83,29 @@ class NotificationManager: NSObject, ObservableObject {
     
     // MARK: - Permission Management
     func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            DispatchQueue.main.async {
-                self.checkPermissionStatus()
+        Task {
+            do {
+                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+                await MainActor.run {
+                    Task {
+                        await self.checkPermissionStatus()
+                    }
+                }
+            } catch {
+                print("Error requesting notification permission: \(error.localizedDescription)")
             }
         }
     }
     
-    func checkPermissionStatus() {
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                self.notificationPermissionStatus = settings.authorizationStatus
-                
-                // If permission was denied, disable notifications
-                if settings.authorizationStatus == .denied {
-                    self.isNotificationsEnabled = false
-                    self.saveSettings()
-                }
+    func checkPermissionStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        await MainActor.run {
+            self.notificationPermissionStatus = settings.authorizationStatus
+            
+            // If permission was denied, disable notifications
+            if settings.authorizationStatus == .denied {
+                self.isNotificationsEnabled = false
+                self.saveSettings()
             }
         }
     }
@@ -134,24 +144,26 @@ class NotificationManager: NSObject, ObservableObject {
     }
     
     private func scheduleNotification(for habit: Habit, at date: Date) {
-        let content = UNMutableNotificationContent()
-        content.title = "Time for your next habit! 🎯"
-        content.body = "Ready to complete: \(habit.name)"
-        content.sound = .default
-        content.badge = 1
-        
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.hour, .minute], from: date)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-        
-        let request = UNNotificationRequest(
-            identifier: "habit_reminder_\(habit.id.uuidString)",
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
+        Task {
+            let content = UNMutableNotificationContent()
+            content.title = "Time for your next habit! 🎯"
+            content.body = "Ready to complete: \(habit.name)"
+            content.sound = .default
+            content.badge = 1
+            
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.hour, .minute], from: date)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            
+            let request = UNNotificationRequest(
+                identifier: "habit_reminder_\(habit.id.uuidString)",
+                content: content,
+                trigger: trigger
+            )
+            
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
                 print("Error scheduling notification: \(error.localizedDescription)")
             }
         }
@@ -249,4 +261,4 @@ extension Calendar {
         
         return self.date(from: newComponents) ?? date
     }
-} 
+}

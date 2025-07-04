@@ -192,7 +192,7 @@ struct OnboardingView: View {
                 habitManager.activateHabitProfile(profile)
                 
                 // Wait a moment for profile activation to complete, then start walkthrough
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     withAnimation(.easeInOut(duration: 0.5)) {
                         showWalkthrough = true
                     }
@@ -1350,6 +1350,7 @@ struct ContentView: View {
     @State private var showingResetAlert = false
     @State private var showingCustomLadderLimitAlert = false
     @State private var customLadderLimitMessage = ""
+    @State private var showingProfileSelection = false
     @State private var hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     
     // End-of-day recap state
@@ -1378,7 +1379,10 @@ struct ContentView: View {
     
     var body: some View {
         Group {
-            if !hasCompletedOnboarding || showOnboarding {
+            if !habitManager.isDataLoaded {
+                // Show loading state while data is being loaded
+                LoadingView()
+            } else if shouldShowOnboarding {
                 OnboardingView {
                     completeOnboarding()
                 }
@@ -1388,31 +1392,46 @@ struct ContentView: View {
                 mainAppContent
             }
         }
+        .task {
+            // Use task for async initialization
+            await initializeApp()
+        }
         .onAppear {
-            if !hasCompletedOnboarding {
+            // Lightweight onAppear for immediate UI updates only
+            if shouldShowOnboarding {
                 showOnboarding = true
-            }
-            
-            // Set up notification integration
-            habitManager.setPremiumStatusCallback { [weak storeManager] in
-                return storeManager?.isPremiumUser ?? false
-            }
-            
-            // Initial notification scheduling
-            notificationManager.scheduleNotifications(for: habitManager.habits, isPremiumUser: storeManager.isPremiumUser)
-            
-            // Check for end-of-day recap after a small delay to let the app settle
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                if shouldShowEndOfDayRecap {
-                    showingEndOfDayRecap = true
-                    // Mark recap as shown for today
-                    UserDefaults.standard.set(Date(), forKey: "EndOfDayRecapLastShown")
-                }
             }
         }
         .onChange(of: storeManager.isPremiumUser) { oldValue, newValue in
             // Update notifications when premium status changes
             notificationManager.handlePremiumStatusChange(isPremium: newValue, habits: habitManager.habits)
+        }
+    }
+    
+    // MARK: - Async Initialization
+    @MainActor
+    private func initializeApp() async {
+        // Debug: Print current state when app appears
+        print("📱 ContentView: App appeared, printing current state:")
+        
+        // Delay state printing to allow data loading to complete
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        habitManager.printCurrentState()
+        
+        // Set up notification integration
+        habitManager.setPremiumStatusCallback { [weak storeManager] in
+            return storeManager?.isPremiumUser ?? false
+        }
+        
+        // Initial notification scheduling
+        notificationManager.scheduleNotifications(for: habitManager.habits, isPremiumUser: storeManager.isPremiumUser)
+        
+        // Check for end-of-day recap after app settles
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        if shouldShowEndOfDayRecap {
+            showingEndOfDayRecap = true
+            // Mark recap as shown for today
+            UserDefaults.standard.set(Date(), forKey: "EndOfDayRecapLastShown")
         }
     }
     
@@ -1525,82 +1544,136 @@ struct ContentView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Header
-                    VStack(spacing: 8) {
-                        HStack {
-                            Text(habitManager.activeCustomLadder?.name ?? habitManager.defaultLadder?.name ?? "HabitLadder")
-                                .font(.largeTitle)
-                                .fontWeight(.bold)
-                                .foregroundColor(HabitTheme.primaryText)
-                            
-                            Spacer()
-                            
-                            // Consolidated menu button
-                            Menu {
-                                // Ladder switching section
-                                if !habitManager.customLadders.isEmpty || habitManager.activeCustomLadder != nil {
-                                    Button(action: { showingLadderSelection = true }) {
-                                        Label("Switch Ladder", systemImage: "arrow.triangle.2.circlepath")
-                                    }
+                    // Header with ladder selector
+                    VStack(spacing: 16) {
+                        // App title
+                        Text("HabitLadder")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(HabitTheme.primaryText)
+                        
+                        // Current Ladder Display with Switch Option
+                        Button(action: {
+                            showingLadderSelection = true
+                        }) {
+                            HStack(spacing: 12) {
+                                // Current ladder icon
+                                Text(getCurrentLadderEmoji())
+                                    .font(.title2)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(getCurrentLadderName())
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(HabitTheme.primaryText)
                                     
-                                    Divider()
-                                }
-                                
-                                Button(action: { 
-                                    if habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) {
-                                        showingCustomLadderView = true
-                                    } else {
-                                        customLadderLimitMessage = habitManager.getCustomLadderLimitMessage()
-                                        showingCustomLadderLimitAlert = true
-                                    }
-                                }) {
-                                    HStack {
-                                        Label("Create Custom Ladder", systemImage: "plus")
-                                        if !habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) {
-                                            Image(systemName: "lock.fill")
-                                                .foregroundColor(.orange)
+                                    HStack(spacing: 4) {
+                                        Text("\(habitManager.habits.count) habits")
+                                            .font(.caption)
+                                            .foregroundColor(HabitTheme.secondaryText)
+                                        
+                                        if habitManager.activeCustomLadder != nil {
+                                            Text("• Custom")
                                                 .font(.caption)
+                                                .foregroundColor(HabitTheme.accent)
+                                        } else if habitManager.defaultLadder != nil {
+                                            Text("• Default")
+                                                .font(.caption)
+                                                .foregroundColor(HabitTheme.accent)
                                         }
                                     }
                                 }
-
-                                Button(action: { showingCuratedLadders = true }) {
-                                    Label("Unlock Curated Ladders", systemImage: "star.fill")
-                                }
                                 
-
+                                Spacer()
                                 
-                                if habitManager.activeCustomLadder != nil {
-                                    Button(action: { 
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            habitManager.switchToDefaultLadder()
-                                        }
-                                    }) {
-                                        Label("Switch to Default Ladder", systemImage: "house")
-                                    }
+                                // Switch indicator
+                                HStack(spacing: 4) {
+                                    Text("Switch")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(HabitTheme.accent)
+                                    
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                        .foregroundColor(HabitTheme.accent)
                                 }
-                            } label: {
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(HabitTheme.cardBackground)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(HabitTheme.accent.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 20)
+                        
+                        // Quick Actions
+                        HStack(spacing: 12) {
+                            // Add Custom Ladder
+                            Button(action: {
+                                if habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) {
+                                    showingCustomLadderView = true
+                                } else {
+                                    customLadderLimitMessage = habitManager.getCustomLadderLimitMessage()
+                                    showingCustomLadderLimitAlert = true
+                                }
+                            }) {
                                 HStack(spacing: 6) {
-                                    Text(habitManager.activeCustomLadder?.emoji ?? habitManager.defaultLadder?.emoji ?? "🪜")
-                                        .font(.title2)
-                                    Image(systemName: "ellipsis.circle")
-                                        .font(.title2)
-                                        .foregroundColor(.blue)
+                                    Image(systemName: "plus")
+                                        .font(.caption)
+                                    Text("New Ladder")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
                                 }
+                                .foregroundColor(habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) ? HabitTheme.accent : HabitTheme.inactive)
                                 .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 6)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(.blue.opacity(0.1))
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(HabitTheme.cardBackground)
                                         .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(.blue.opacity(0.3), lineWidth: 1)
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser) ? HabitTheme.accent.opacity(0.3) : HabitTheme.inactive.opacity(0.3), lineWidth: 1)
                                         )
                                 )
                             }
+                            .disabled(!habitManager.canAddCustomLadder(isPremium: storeManager.isPremiumUser))
+                            
+                            // Browse Curated Ladders
+                            Button(action: {
+                                showingCuratedLadders = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "star")
+                                        .font(.caption)
+                                    Text("Browse")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(HabitTheme.accent)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(HabitTheme.cardBackground)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(HabitTheme.accent.opacity(0.3), lineWidth: 1)
+                                        )
+                                )
+                            }
+                            
+                            Spacer()
                         }
+                        .padding(.horizontal, 20)
                     }
-                    .padding()
+                    .padding(.top)
                     
                     // Habits List and Reset Button in ScrollView
                     ScrollView {
@@ -1622,6 +1695,7 @@ struct ContentView: View {
                                         habits: habitManager.habits,
                                         isNewlyUnlocked: habitManager.unlockedHabitForAnimation == habit.id
                                     )
+                                    .id(habit.id) // Stable identity for better performance
                                 }
                             }
                         }
@@ -1729,6 +1803,17 @@ struct ContentView: View {
         .sheet(isPresented: $showingEndOfDayRecap) {
             EndOfDayRecapView(habits: habitManager.habits)
         }
+        .sheet(isPresented: $showingProfileSelection) {
+            HabitProfileSelectionView(
+                onProfileSelected: { profile in
+                    habitManager.activateHabitProfile(profile)
+                    showingProfileSelection = false
+                },
+                onDismiss: {
+                    showingProfileSelection = false
+                }
+            )
+        }
         .alert("Reset All Habits", isPresented: $showingResetAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Reset", role: .destructive) {
@@ -1763,8 +1848,60 @@ struct ContentView: View {
         }
         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
         UserDefaults.standard.set(true, forKey: "hasSelectedProfile")
+        UserDefaults.standard.synchronize() // Force immediate save
+        
+        // Ensure the habit manager data is also saved
+        habitManager.saveHabits()
+        habitManager.saveUsageFlags()
+        
+        print("✅ ContentView: Onboarding completed and data saved")
     }
 
+    // Computed property to determine if onboarding should be shown
+    private var shouldShowOnboarding: Bool {
+        // Always show onboarding if it hasn't been completed
+        if !hasCompletedOnboarding {
+            return true
+        }
+        
+        // Wait for data to be loaded before making decisions
+        guard habitManager.isDataLoaded else {
+            return false // Show loading state, not onboarding
+        }
+        
+        // If onboarding was completed but there's no data loaded, show onboarding again
+        // This handles cases where profile selection was completed but data didn't persist
+        if habitManager.defaultLadder == nil && habitManager.habits.isEmpty && habitManager.activeCustomLadder == nil {
+            print("⚠️ ContentView: Onboarding was completed but no profile data found, showing onboarding again")
+            return true
+        }
+        
+        // Show onboarding if explicitly requested
+        return showOnboarding
+    }
+    
+    // MARK: - Helper Functions for Ladder Selector
+    private func getCurrentLadderEmoji() -> String {
+        if let activeCustomLadder = habitManager.activeCustomLadder {
+            return activeCustomLadder.emoji ?? "🪜"
+        } else if let defaultLadder = habitManager.defaultLadder {
+            return defaultLadder.emoji ?? "👤"
+        } else {
+            return "👤"
+        }
+    }
+    
+    private func getCurrentLadderName() -> String {
+        if let activeCustomLadder = habitManager.activeCustomLadder {
+            return activeCustomLadder.name
+        } else if let defaultLadder = habitManager.defaultLadder {
+            return defaultLadder.name
+        } else {
+            return "Choose Profile"
+        }
+    }
+    
+    // MARK: - End-of-day recap logic
 }
 
 // MARK: - Empty Habits View
@@ -2005,15 +2142,20 @@ struct LadderSelectionView: View {
     
     private var defaultLadderCard: some View {
         Button(action: {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                habitManager.switchToDefaultLadder()
+            if habitManager.defaultLadder != nil {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    habitManager.switchToDefaultLadder()
+                }
+                dismiss()
+            } else {
+                // No default profile selected, show profile selection
+                showingProfileSelection = true
             }
-            dismiss()
         }) {
             HStack(spacing: 16) {
                 // Ladder icon
                 VStack {
-                    Text(habitManager.defaultLadder?.emoji ?? "🏠")
+                    Text(habitManager.defaultLadder?.emoji ?? "👤")
                         .font(.title)
                     Text("Default")
                         .font(.caption2)
@@ -2023,25 +2165,38 @@ struct LadderSelectionView: View {
                 .frame(width: 60)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(habitManager.defaultLadder?.name ?? "Default Ladder")
+                    Text(habitManager.defaultLadder?.name ?? "Choose Profile")
                         .font(.headline)
                         .fontWeight(.semibold)
-                        .foregroundColor(HabitTheme.primaryText)
-                    Text("\(habitManager.defaultLadder?.habits.count ?? 0) habits")
-                        .font(.subheadline)
-                        .foregroundColor(HabitTheme.secondaryText)
+                        .foregroundColor(habitManager.defaultLadder != nil ? HabitTheme.primaryText : HabitTheme.secondaryText)
+                    
+                    if let defaultLadder = habitManager.defaultLadder {
+                        Text("\(defaultLadder.habits.count) habits")
+                            .font(.subheadline)
+                            .foregroundColor(HabitTheme.secondaryText)
+                    } else {
+                        Text("Tap to select a profile")
+                            .font(.subheadline)
+                            .foregroundColor(HabitTheme.tertiaryText)
+                    }
                 }
                 
                 Spacer()
                 
-                if habitManager.activeCustomLadder == nil {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.blue)
-                        .font(.title2)
+                if habitManager.defaultLadder != nil {
+                    if habitManager.activeCustomLadder == nil {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.title2)
+                    } else {
+                        Image(systemName: "circle")
+                            .foregroundColor(HabitTheme.inactive)
+                            .font(.title2)
+                    }
                 } else {
-                    Image(systemName: "circle")
+                    Image(systemName: "chevron.right")
                         .foregroundColor(HabitTheme.inactive)
-                        .font(.title2)
+                        .font(.headline)
                 }
             }
             .padding(20)
@@ -2056,20 +2211,56 @@ struct LadderSelectionView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(
-                        habitManager.activeCustomLadder == nil ? 
-                        Color.blue.opacity(0.4) : 
-                        HabitTheme.inactive.opacity(0.3), 
-                        lineWidth: habitManager.activeCustomLadder == nil ? 2 : 1
+                        getDefaultLadderBorderColor(),
+                        lineWidth: getDefaultLadderBorderWidth()
                     )
             )
             .shadow(
-                color: habitManager.activeCustomLadder == nil ? 
-                Color.blue.opacity(0.15) : 
-                .black.opacity(0.05),
-                radius: habitManager.activeCustomLadder == nil ? 8 : 4,
+                color: getDefaultLadderShadowColor(),
+                radius: getDefaultLadderShadowRadius(),
                 x: 0,
                 y: 4
             )
+    }
+    
+    private func getDefaultLadderBorderColor() -> Color {
+        if habitManager.defaultLadder == nil {
+            return HabitTheme.inactive.opacity(0.4)
+        } else if habitManager.activeCustomLadder == nil {
+            return Color.blue.opacity(0.4)
+        } else {
+            return HabitTheme.inactive.opacity(0.3)
+        }
+    }
+    
+    private func getDefaultLadderBorderWidth() -> CGFloat {
+        if habitManager.defaultLadder == nil {
+            return 1.5
+        } else if habitManager.activeCustomLadder == nil {
+            return 2
+        } else {
+            return 1
+        }
+    }
+    
+    private func getDefaultLadderShadowColor() -> Color {
+        if habitManager.defaultLadder == nil {
+            return .black.opacity(0.05)
+        } else if habitManager.activeCustomLadder == nil {
+            return Color.blue.opacity(0.15)
+        } else {
+            return .black.opacity(0.05)
+        }
+    }
+    
+    private func getDefaultLadderShadowRadius() -> CGFloat {
+        if habitManager.defaultLadder == nil {
+            return 4
+        } else if habitManager.activeCustomLadder == nil {
+            return 8
+        } else {
+            return 4
+        }
     }
     
     private var customLaddersSection: some View {
@@ -3478,5 +3669,154 @@ struct SparkleAnimation: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Loading View
+struct LoadingView: View {
+    @State private var isAnimating = false
+    
+    var body: some View {
+        ZStack {
+            HabitTheme.backgroundPrimary
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                // App icon with animation
+                Image("SplashIcon")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 80, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: HabitTheme.primary.opacity(0.3), radius: 12, x: 0, y: 6)
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isAnimating)
+                
+                VStack(spacing: 8) {
+                    Text("Loading your habits...")
+                        .font(.headline)
+                        .foregroundColor(HabitTheme.primaryText)
+                    
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: HabitTheme.primary))
+                        .scaleEffect(1.2)
+                }
+            }
+        }
+        .onAppear {
+            isAnimating = true
+        }
+    }
+}
+
+// MARK: - Ladder Switcher Card Components
+struct LadderSwitcherCard: View {
+    let emoji: String
+    let name: String
+    let isActive: Bool
+    let isPlaceholder: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Text(emoji)
+                    .font(.title2)
+                
+                Text(name)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(isPlaceholder ? HabitTheme.secondaryText : (isActive ? .white : HabitTheme.primaryText))
+                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(width: 80, height: 80)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(backgroundColorForCard())
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(borderColorForCard(), lineWidth: isActive ? 2 : 1)
+                    )
+            )
+            .shadow(
+                color: shadowColorForCard(),
+                radius: isActive ? 8 : 4,
+                x: 0,
+                y: 2
+            )
+            .scaleEffect(isActive ? 1.05 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isActive)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func backgroundColorForCard() -> Color {
+        if isPlaceholder {
+            return HabitTheme.cardBackground.opacity(0.7)
+        } else if isActive {
+            return HabitTheme.primary
+        } else {
+            return HabitTheme.cardBackground
+        }
+    }
+    
+    private func borderColorForCard() -> Color {
+        if isPlaceholder {
+            return HabitTheme.inactive.opacity(0.5)
+        } else if isActive {
+            return HabitTheme.primary
+        } else {
+            return HabitTheme.inactive.opacity(0.3)
+        }
+    }
+    
+    private func shadowColorForCard() -> Color {
+        if isActive {
+            return HabitTheme.primary.opacity(0.3)
+        } else {
+            return .black.opacity(0.1)
+        }
+    }
+}
+
+struct AddLadderCard: View {
+    let action: () -> Void
+    let isLocked: Bool
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: isLocked ? "lock.fill" : "plus")
+                    .font(.title2)
+                    .foregroundColor(isLocked ? .orange : HabitTheme.primary)
+                
+                Text(isLocked ? "Locked" : "Add")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(isLocked ? .orange : HabitTheme.primary)
+            }
+            .frame(width: 80, height: 80)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isLocked ? Color.orange.opacity(0.1) : HabitTheme.primary.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                isLocked ? Color.orange.opacity(0.4) : HabitTheme.primary.opacity(0.4),
+                                lineWidth: 1.5
+                            )
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
+                    )
+            )
+            .shadow(
+                color: isLocked ? Color.orange.opacity(0.2) : HabitTheme.primary.opacity(0.2),
+                radius: 4,
+                x: 0,
+                y: 2
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isLocked)
     }
 }

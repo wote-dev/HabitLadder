@@ -77,10 +77,12 @@ class HabitManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.saveHabits()
-            self?.saveCustomLadders()
-            self?.saveUsageFlags()
-            print("📱 HabitManager: Auto-saved data due to app backgrounding")
+            Task { @MainActor in
+                self?.saveHabits()
+                self?.saveCustomLadders()
+                self?.saveUsageFlags()
+                print("📱 HabitManager: Auto-saved data due to app backgrounding")
+            }
         }
         
         // Set up automatic saving when app will terminate
@@ -89,17 +91,21 @@ class HabitManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.saveHabits()
-            self?.saveCustomLadders()
-            self?.saveUsageFlags()
-            print("📱 HabitManager: Auto-saved data due to app termination")
+            Task { @MainActor in
+                self?.saveHabits()
+                self?.saveCustomLadders()
+                self?.saveUsageFlags()
+                print("📱 HabitManager: Auto-saved data due to app termination")
+            }
         }
         
-        // Set up periodic auto-save every 30 seconds when app is active
-        Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            self?.saveHabits()
-            self?.saveCustomLadders()
-            self?.saveUsageFlags()
+        // Set up periodic auto-save every 60 seconds when app is active (reduced frequency)
+        Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.saveHabits()
+                self?.saveCustomLadders()
+                self?.saveUsageFlags()
+            }
         }
     }
     
@@ -108,53 +114,105 @@ class HabitManager: ObservableObject {
     }
     
     func loadData() {
-        loadDefaultLadder()
-        loadHabits()
-        loadCustomLadders()
-        loadActiveCustomLadder()
-        loadUsageFlags()
-        
-        // Clean up any profile-based ladders that might be in custom ladders from previous versions
-        cleanupProfileBasedCustomLadders()
-        
-        // Mark data as loaded
-        DispatchQueue.main.async {
+        Task { @MainActor in
+            print("📱 HabitManager: Starting to load data...")
+            
+            // Load data in parallel for better performance
+            async let defaultLadderTask = loadDefaultLadder()
+            async let customLaddersTask = loadCustomLadders()
+            async let activeCustomLadderTask = loadActiveCustomLadder()
+            async let usageFlagsTask = loadUsageFlags()
+            
+            // Wait for all loading tasks to complete
+            await defaultLadderTask
+            await customLaddersTask
+            await activeCustomLadderTask
+            await usageFlagsTask
+            
+            print("📱 HabitManager: Loaded defaultLadder: \(defaultLadder?.name ?? "nil")")
+            print("📱 HabitManager: Loaded \(customLadders.count) custom ladders")
+            print("📱 HabitManager: Loaded activeCustomLadder: \(activeCustomLadder?.name ?? "nil")")
+            print("📱 HabitManager: Loaded usage flags - hasUsedDefaultProfile: \(hasUsedDefaultProfile), hasUsedCustomLadder: \(hasUsedCustomLadder)")
+            
+            // Load habits after other data is ready
+            loadHabits()
+            print("📱 HabitManager: Loaded \(habits.count) habits")
+            
+            // Clean up any profile-based ladders that might be in custom ladders from previous versions
+            cleanupProfileBasedCustomLadders()
+            
+            // Mark data as loaded
             self.isDataLoaded = true
+            print("✅ HabitManager: Data loading complete - defaultLadder: \(self.defaultLadder?.name ?? "nil"), habits: \(self.habits.count)")
+            
+            // Print detailed state for debugging
+            self.printCurrentState()
+            
+            // Additional verification: If we have a defaultLadder but no habits, something went wrong
+            if self.defaultLadder != nil && self.habits.isEmpty && self.activeCustomLadder == nil {
+                print("⚠️ HabitManager: Detected data inconsistency - have defaultLadder but no habits, attempting recovery")
+                self.recoverFromDataInconsistency()
+            }
         }
     }
     
-    func loadDefaultLadder() {
-        if let data = userDefaults.data(forKey: defaultLadderKey),
-           let decodedLadder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
-            self.defaultLadder = decodedLadder
-        }
+    func loadDefaultLadder() async {
+        await Task.detached {
+            if let data = self.userDefaults.data(forKey: self.defaultLadderKey),
+               let decodedLadder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
+                await MainActor.run {
+                    self.defaultLadder = decodedLadder
+                    print("📱 HabitManager: Loaded defaultLadder '\(decodedLadder.name)' with \(decodedLadder.habits.count) habits")
+                }
+            } else {
+                await MainActor.run {
+                    self.defaultLadder = nil
+                    print("📱 HabitManager: No defaultLadder found in UserDefaults")
+                }
+            }
+        }.value
     }
     
     func saveDefaultLadder() {
         if let ladder = defaultLadder,
            let encoded = try? JSONEncoder().encode(ladder) {
             userDefaults.set(encoded, forKey: defaultLadderKey)
+            userDefaults.synchronize() // Force immediate write to disk
+            print("📱 HabitManager: Saved defaultLadder '\(ladder.name)' to UserDefaults")
         }
     }
     
     func loadHabits() {
         var habitsToLoad: [Habit] = []
         
-        if let data = userDefaults.data(forKey: habitsKey),
-           let decodedHabits = try? JSONDecoder().decode([Habit].self, from: data) {
-            habitsToLoad = decodedHabits
-        } else if let defaultLadder = defaultLadder {
-            // Use the user's default ladder if no habits are saved
+        // Priority 1: If there's an active custom ladder, use its habits
+        if let activeCustomLadder = activeCustomLadder {
+            habitsToLoad = activeCustomLadder.habits
+            print("📱 HabitManager: Loaded \(activeCustomLadder.habits.count) habits from activeCustomLadder '\(activeCustomLadder.name)'")
+        }
+        // Priority 2: Use the user's default ladder if no custom ladder is active
+        else if let defaultLadder = defaultLadder {
             habitsToLoad = defaultLadder.habits
-        } else {
-            // If no default ladder is set, user needs to select a profile
+            print("📱 HabitManager: Loaded \(defaultLadder.habits.count) habits from defaultLadder '\(defaultLadder.name)'")
+        }
+        // Priority 3: Fallback to saved habits (for migration only)
+        else if let data = userDefaults.data(forKey: habitsKey),
+               let decodedHabits = try? JSONDecoder().decode([Habit].self, from: data),
+               !decodedHabits.isEmpty {
+            habitsToLoad = decodedHabits
+            print("📱 HabitManager: Loaded \(decodedHabits.count) saved habits from habitsKey (migration fallback)")
+        }
+        // Priority 4: If no ladder is set, user needs to select a profile
+        else {
             habitsToLoad = []
+            print("📱 HabitManager: No habits or ladders found - habits array will be empty")
         }
         
         // Ensure habits are updated on main thread
         DispatchQueue.main.async {
             self.habits = habitsToLoad
             self.updateUnlockedStatus()
+            print("📱 HabitManager: Set habits array to \(habitsToLoad.count) habits")
         }
     }
     
@@ -170,29 +228,43 @@ class HabitManager: ObservableObject {
         updateUnlockedStatus()
     }
     
-    func loadCustomLadders() {
-        if let data = userDefaults.data(forKey: customLaddersKey),
-           let decodedLadders = try? JSONDecoder().decode([CustomHabitLadder].self, from: data) {
-            self.customLadders = decodedLadders
-        }
-    }
-    
-    func loadActiveCustomLadder() {
-        if let data = userDefaults.data(forKey: activeCustomLadderKey),
-           let decodedLadder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
-            // Ensure updates happen on main thread
-            DispatchQueue.main.async {
-                self.activeCustomLadder = decodedLadder
-                // Use custom ladder habits instead of default
-                self.habits = decodedLadder.habits
-                self.updateUnlockedStatus()
+    func loadCustomLadders() async {
+        await Task.detached {
+            if let data = self.userDefaults.data(forKey: self.customLaddersKey),
+               let decodedLadders = try? JSONDecoder().decode([CustomHabitLadder].self, from: data) {
+                await MainActor.run {
+                    self.customLadders = decodedLadders
+                }
             }
-        }
+        }.value
     }
     
-    func loadUsageFlags() {
-        hasUsedDefaultProfile = userDefaults.bool(forKey: hasUsedDefaultProfileKey)
-        hasUsedCustomLadder = userDefaults.bool(forKey: hasUsedCustomLadderKey)
+    func loadActiveCustomLadder() async {
+        await Task.detached {
+            if let data = self.userDefaults.data(forKey: self.activeCustomLadderKey),
+               let decodedLadder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
+                await MainActor.run {
+                    self.activeCustomLadder = decodedLadder
+                    print("📱 HabitManager: Loaded activeCustomLadder '\(decodedLadder.name)' with \(decodedLadder.habits.count) habits")
+                }
+            } else {
+                await MainActor.run {
+                    self.activeCustomLadder = nil
+                    print("📱 HabitManager: No activeCustomLadder found in UserDefaults")
+                }
+            }
+        }.value
+    }
+    
+    func loadUsageFlags() async {
+        await Task.detached {
+            let hasUsedDefault = self.userDefaults.bool(forKey: self.hasUsedDefaultProfileKey)
+            let hasUsedCustom = self.userDefaults.bool(forKey: self.hasUsedCustomLadderKey)
+            await MainActor.run {
+                self.hasUsedDefaultProfile = hasUsedDefault
+                self.hasUsedCustomLadder = hasUsedCustom
+            }
+        }.value
     }
     
     func saveHabits() {
@@ -202,15 +274,20 @@ class HabitManager: ObservableObject {
             activeCustomLadder = customLadder
             saveActiveCustomLadder()
             updateCustomLadder(customLadder)
+            print("📱 HabitManager: Saved \(habits.count) habits to activeCustomLadder '\(customLadder.name)'")
         } else if var userDefaultLadder = defaultLadder {
             // Save to user's default ladder when not using custom ladder
             userDefaultLadder.habits = habits
             defaultLadder = userDefaultLadder
             saveDefaultLadder()
-        } else {
-            // Fallback to saving as regular habits (for migration)
+            print("📱 HabitManager: Saved \(habits.count) habits to defaultLadder '\(userDefaultLadder.name)'")
+        }
+        
+        // Only save backup if we have no active ladder or default ladder (fallback for migration)
+        if activeCustomLadder == nil && defaultLadder == nil && !habits.isEmpty {
             if let encoded = try? JSONEncoder().encode(habits) {
                 userDefaults.set(encoded, forKey: habitsKey)
+                print("📱 HabitManager: Created fallback backup of \(habits.count) habits in habitsKey")
             }
         }
     }
@@ -225,14 +302,19 @@ class HabitManager: ObservableObject {
         if let ladder = activeCustomLadder,
            let encoded = try? JSONEncoder().encode(ladder) {
             userDefaults.set(encoded, forKey: activeCustomLadderKey)
+            print("📱 HabitManager: Saved activeCustomLadder '\(ladder.name)' to UserDefaults")
         } else {
             userDefaults.removeObject(forKey: activeCustomLadderKey)
+            userDefaults.synchronize() // Force immediate removal from disk
+            print("📱 HabitManager: Removed activeCustomLadder from UserDefaults")
         }
     }
     
     func saveUsageFlags() {
         userDefaults.set(hasUsedDefaultProfile, forKey: hasUsedDefaultProfileKey)
         userDefaults.set(hasUsedCustomLadder, forKey: hasUsedCustomLadderKey)
+        userDefaults.synchronize() // Force immediate write to disk
+        print("📱 HabitManager: Saved usage flags - hasUsedDefaultProfile: \(hasUsedDefaultProfile), hasUsedCustomLadder: \(hasUsedCustomLadder)")
     }
     
 
@@ -411,8 +493,8 @@ class HabitManager: ObservableObject {
         habits[index].lastCheckedDate = today
         
         // Update streak progress for immediate feedback
-        let streakCount = habits[index].consecutiveStreakCount
-        let hasThreeConsecutive = habits[index].hasThreeConsecutiveCompletions
+        let _ = habits[index].consecutiveStreakCount
+        let _ = habits[index].hasThreeConsecutiveCompletions
         
         // Create calendar event for habit completion
         Task { @MainActor in
@@ -578,9 +660,11 @@ class HabitManager: ObservableObject {
         if let userDefaultLadder = defaultLadder {
             habits = userDefaultLadder.habits
             updateUnlockedStatus()
+            print("📱 HabitManager: Switched to default ladder '\(userDefaultLadder.name)' with \(userDefaultLadder.habits.count) habits")
         } else {
             // If no default ladder is set, habits should be empty (user needs to select profile)
             habits = []
+            print("⚠️ HabitManager: Cannot switch to default ladder - no defaultLadder is set. User needs to select a profile.")
         }
         
         // Immediate save after switching to default ladder
@@ -595,6 +679,8 @@ class HabitManager: ObservableObject {
     
     // MARK: - Profile Management
     func activateHabitProfile(_ profile: HabitProfile) {
+        print("📱 HabitManager: Starting to activate habit profile '\(profile.name)'")
+        
         let profileLadder = CustomHabitLadder(
             name: profile.name,
             habits: profile.habits,
@@ -608,27 +694,89 @@ class HabitManager: ObservableObject {
             
             // Set this profile as the user's default ladder
             self.defaultLadder = profileLadder
+            print("📱 HabitManager: Set defaultLadder to '\(profileLadder.name)' with \(profileLadder.habits.count) habits")
+            
+            // Save immediately after setting
             self.saveDefaultLadder()
+            print("📱 HabitManager: Saved defaultLadder to UserDefaults")
             
             // Use this ladder's habits as current habits
             self.habits = profileLadder.habits
+            print("📱 HabitManager: Set current habits array to \(self.habits.count) habits")
             self.updateUnlockedStatus()
             
             // Clear any active custom ladder since we're using the default now
             self.activeCustomLadder = nil
             self.saveActiveCustomLadder()
+            print("📱 HabitManager: Cleared activeCustomLadder")
             
             // Mark that user has used default profile
             self.hasUsedDefaultProfile = true
+            print("📱 HabitManager: Set hasUsedDefaultProfile to true")
             
             // Immediate save after activating profile
             self.saveUsageFlags()
             self.saveHabits()
             
-print("📱 HabitManager: Set habit profile '\(profile.name)' as user's default ladder with \(self.habits.count) habits")
+            // Force UserDefaults synchronization to ensure data is written to disk
+            self.userDefaults.synchronize()
+            
+            // Verify the save worked by attempting to reload
+            self.verifyProfileActivation(profileName: profile.name)
+            
+            print("✅ HabitManager: Successfully activated habit profile '\(profile.name)' with \(self.habits.count) habits")
         }
         
         // Note: Profile ladders are NOT added to custom ladders - they remain as default only
+    }
+    
+    // Helper method to verify profile activation worked correctly
+    private func verifyProfileActivation(profileName: String) {
+        // Try to reload the default ladder to verify it was saved
+        if let data = userDefaults.data(forKey: defaultLadderKey),
+           let decodedLadder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
+            print("✅ HabitManager: Verification successful - defaultLadder '\(decodedLadder.name)' found in UserDefaults with \(decodedLadder.habits.count) habits")
+        } else {
+            print("⚠️ HabitManager: Verification failed - no defaultLadder found in UserDefaults, attempting recovery")
+            // If verification fails, try to save again
+            if defaultLadder != nil {
+                saveDefaultLadder()
+                userDefaults.synchronize() // Force sync after recovery save
+                print("📱 HabitManager: Recovery save attempted for defaultLadder")
+            }
+        }
+        
+        // Verify usage flag was saved
+        let savedFlag = userDefaults.bool(forKey: hasUsedDefaultProfileKey)
+        if savedFlag {
+            print("✅ HabitManager: Verification successful - hasUsedDefaultProfile flag is set")
+        } else {
+            print("⚠️ HabitManager: Verification failed - hasUsedDefaultProfile flag not set, attempting recovery")
+            userDefaults.set(true, forKey: hasUsedDefaultProfileKey)
+            userDefaults.synchronize() // Force sync after recovery save
+            print("📱 HabitManager: Recovery save attempted for hasUsedDefaultProfile flag")
+        }
+        
+        // Verify habits backup was saved
+        if let data = userDefaults.data(forKey: habitsKey),
+           let decodedHabits = try? JSONDecoder().decode([Habit].self, from: data) {
+            print("✅ HabitManager: Verification successful - habits backup found with \(decodedHabits.count) habits")
+        } else {
+            print("⚠️ HabitManager: Verification failed - no habits backup found")
+        }
+    }
+    
+    private func recoverFromDataInconsistency() {
+        // If we have a defaultLadder but no habits, restore habits from the defaultLadder
+        if let defaultLadder = defaultLadder, habits.isEmpty {
+            print("📱 HabitManager: Recovering habits from defaultLadder '\(defaultLadder.name)'")
+            habits = defaultLadder.habits
+            updateUnlockedStatus()
+            
+            // Save the recovered state
+            saveHabits()
+            print("✅ HabitManager: Recovery successful - restored \(habits.count) habits from defaultLadder")
+        }
     }
     
     private func cleanupProfileBasedCustomLadders() {
@@ -670,7 +818,36 @@ print("📱 HabitManager: Set habit profile '\(profile.name)' as user's default 
         NotificationManager.shared.scheduleNotifications(for: habits, isPremiumUser: isPremiumUser)
     }
     
-    // MARK: - Testing Methods
+    // MARK: - Debug and Testing Methods
+    func printCurrentState() {
+        print("🔍 HabitManager Current State:")
+        print("  - isDataLoaded: \(isDataLoaded)")
+        print("  - habits.count: \(habits.count)")
+        print("  - defaultLadder: \(defaultLadder?.name ?? "nil")")
+        print("  - activeCustomLadder: \(activeCustomLadder?.name ?? "nil")")
+        print("  - hasUsedDefaultProfile: \(hasUsedDefaultProfile)")
+        print("  - hasUsedCustomLadder: \(hasUsedCustomLadder)")
+        
+        // Check UserDefaults
+        let hasDefaultLadderData = userDefaults.data(forKey: defaultLadderKey) != nil
+        let hasHabitsData = userDefaults.data(forKey: habitsKey) != nil
+        let hasActiveCustomLadderData = userDefaults.data(forKey: activeCustomLadderKey) != nil
+        print("  - UserDefaults defaultLadder exists: \(hasDefaultLadderData)")
+        print("  - UserDefaults habits exists: \(hasHabitsData)")
+        print("  - UserDefaults activeCustomLadder exists: \(hasActiveCustomLadderData)")
+        
+        // Try to decode and show actual data
+        if let data = userDefaults.data(forKey: defaultLadderKey),
+           let ladder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
+            print("  - Decoded defaultLadder: '\(ladder.name)' with \(ladder.habits.count) habits")
+        }
+        
+        if let data = userDefaults.data(forKey: activeCustomLadderKey),
+           let ladder = try? JSONDecoder().decode(CustomHabitLadder.self, from: data) {
+            print("  - Decoded activeCustomLadder: '\(ladder.name)' with \(ladder.habits.count) habits")
+        }
+    }
+    
     #if DEBUG
     /// For testing purposes only - manually trigger unlock animation
     func testUnlockAnimation(for habitId: UUID) {
@@ -688,4 +865,4 @@ print("📱 HabitManager: Set habit profile '\(profile.name)' as user's default 
         triggerEnhancedUnlockCelebration(unlockedHabit: habit)
     }
     #endif
-} 
+}
