@@ -54,17 +54,47 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Gradient background with subtle animation
-                LinearGradient(
-                    colors: [
-                        HabitTheme.backgroundPrimary,
-                        HabitTheme.backgroundSecondary,
-                        currentPage == 0 ? HabitTheme.primary.opacity(0.05) : 
-                        (currentPage == 1 ? HabitTheme.accent.opacity(0.05) : HabitTheme.success.opacity(0.05))
-                    ],
-                    startPoint: backgroundGradientAnimation ? .topTrailing : .topLeading,
-                    endPoint: backgroundGradientAnimation ? .bottomLeading : .bottomTrailing
-                )
+                // Enhanced gradient background with dynamic animation
+                ZStack {
+                    // Base gradient
+                    LinearGradient(
+                        colors: [
+                            HabitTheme.backgroundPrimary,
+                            HabitTheme.backgroundSecondary,
+                            currentPage == 0 ? HabitTheme.primary.opacity(0.08) : 
+                            (currentPage == 1 ? HabitTheme.accent.opacity(0.08) : HabitTheme.success.opacity(0.08))
+                        ],
+                        startPoint: backgroundGradientAnimation ? .topTrailing : .topLeading,
+                        endPoint: backgroundGradientAnimation ? .bottomLeading : .bottomTrailing
+                    )
+                    
+                    // Floating orbs for depth
+                    ForEach(0..<3, id: \.self) { index in
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        (currentPage == 0 ? HabitTheme.primary : HabitTheme.accent).opacity(0.15),
+                                        Color.clear
+                                    ],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 100
+                                )
+                            )
+                            .frame(width: 200, height: 200)
+                            .offset(
+                                x: backgroundGradientAnimation ? CGFloat.random(in: -50...50) : CGFloat.random(in: -30...30),
+                                y: backgroundGradientAnimation ? CGFloat.random(in: -100...100) : CGFloat.random(in: -50...50)
+                            )
+                            .animation(
+                                .easeInOut(duration: Double.random(in: 3...5))
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.5),
+                                value: backgroundGradientAnimation
+                            )
+                    }
+                }
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: backgroundGradientAnimation)
                 
@@ -134,11 +164,50 @@ struct OnboardingView: View {
                                     .font(.headline)
                                     .foregroundColor(Color.primary)
                                     .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
+                                    .padding(.vertical, 18)
                                     .background(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .stroke(HabitTheme.inactive.opacity(0.6), lineWidth: 1.5)
-                                            .fill(HabitTheme.cardBackground.opacity(0.8))
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 20)
+                                                .fill(
+                                                    LinearGradient(
+                                                        colors: [
+                                                            HabitTheme.cardBackground.opacity(0.9),
+                                                            HabitTheme.cardBackground.opacity(0.7)
+                                                        ],
+                                                        startPoint: .topLeading,
+                                                        endPoint: .bottomTrailing
+                                                    )
+                                                )
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 20)
+                                                        .fill(.regularMaterial)
+                                                )
+                                            
+                                            RoundedRectangle(cornerRadius: 20)
+                                                .fill(
+                                                    LinearGradient(
+                                                        colors: [
+                                                            Color.white.opacity(0.1),
+                                                            Color.clear
+                                                        ],
+                                                        startPoint: .top,
+                                                        endPoint: .bottom
+                                                    )
+                                                )
+                                        }
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 20)
+                                                .stroke(
+                                                    HabitTheme.inactive.opacity(0.4),
+                                                    lineWidth: 1.5
+                                                )
+                                        )
+                                        .shadow(
+                                            color: Color.black.opacity(0.08),
+                                            radius: 8,
+                                            x: 0,
+                                            y: 4
+                                        )
                                     )
                                 }
                                 
@@ -146,11 +215,62 @@ struct OnboardingView: View {
                                     handleButtonTap()
                                 }
                                 .font(.headline)
+                                .fontWeight(.semibold)
                                 .foregroundColor(buttonTextColor())
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(buttonBackground())
-                                .cornerRadius(16)
+                                .padding(.vertical, 18)
+                                .background(
+                                    ZStack {
+                                        // Glass morphism base
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: currentPage == 1 && selectedProfile == nil ? [
+                                                        HabitTheme.inactive.opacity(0.4),
+                                                        HabitTheme.inactive.opacity(0.2)
+                                                    ] : [
+                                                        (currentPage == 0 ? HabitTheme.primary : (selectedProfile?.gradientColors.first ?? HabitTheme.accent)),
+                                                        (currentPage == 0 ? HabitTheme.primary : (selectedProfile?.gradientColors.first ?? HabitTheme.accent)).opacity(0.8)
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 20)
+                                                    .fill(.ultraThinMaterial)
+                                            )
+                                        
+                                        // Highlight overlay
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.white.opacity(currentPage == 1 && selectedProfile == nil ? 0.05 : 0.2),
+                                                        Color.clear
+                                                    ],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                )
+                                            )
+                                    }
+                                    .shadow(
+                                        color: currentPage == 1 && selectedProfile == nil ? 
+                                            Color.black.opacity(0.05) : 
+                                            (currentPage == 0 ? HabitTheme.primary : (selectedProfile?.gradientColors.first ?? HabitTheme.accent)).opacity(0.3),
+                                        radius: currentPage == 1 && selectedProfile == nil ? 4 : 12,
+                                        x: 0,
+                                        y: currentPage == 1 && selectedProfile == nil ? 2 : 6
+                                    )
+                                    .shadow(
+                                        color: currentPage == 1 && selectedProfile == nil ? 
+                                            Color.clear : 
+                                            (currentPage == 0 ? HabitTheme.primary : (selectedProfile?.gradientColors.last ?? HabitTheme.accent)).opacity(0.2),
+                                        radius: currentPage == 1 && selectedProfile == nil ? 0 : 20,
+                                        x: 0,
+                                        y: 0
+                                    )
+                                )
                                 .scaleEffect(isAnimating ? 0.95 : 1.0)
                                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isAnimating)
                                 .disabled(currentPage == 1 && selectedProfile == nil)
@@ -243,19 +363,61 @@ struct WelcomeLadderView: View {
                 
                 // App Icon with animation
                 VStack(spacing: 24) {
-                    Image("SplashIcon")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 80, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(
-                            color: HabitTheme.primary.opacity(0.3),
-                            radius: 12,
-                            x: 0,
-                            y: 6
-                        )
-                        .scaleEffect(iconScale)
-                        .animation(.spring(response: 0.8, dampingFraction: 0.6), value: iconScale)
+                    ZStack {
+                        // Glass morphism background
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        HabitTheme.primary.opacity(0.15),
+                                        HabitTheme.accent.opacity(0.1),
+                                        Color.clear
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(.ultraThinMaterial)
+                            )
+                            .frame(width: 100, height: 100)
+                        
+                        // App icon
+                        Image("SplashIcon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 80, height: 80)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        HabitTheme.primary.opacity(0.4),
+                                        HabitTheme.accent.opacity(0.2)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .shadow(
+                        color: HabitTheme.primary.opacity(0.3),
+                        radius: 20,
+                        x: 0,
+                        y: 10
+                    )
+                    .shadow(
+                        color: HabitTheme.accent.opacity(0.2),
+                        radius: 35,
+                        x: 0,
+                        y: 0
+                    )
+                    .scaleEffect(iconScale)
+                    .animation(.spring(response: 0.8, dampingFraction: 0.6), value: iconScale)
                 }
                 
                 // Title and subtitle
@@ -336,14 +498,59 @@ struct WelcomeLadderView: View {
                             )
                         }
                     }
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 20)
                     .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(HabitTheme.cardBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(HabitTheme.primary.opacity(0.2), lineWidth: 1)
-                            )
+                        ZStack {
+                            // Glass morphism base
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            HabitTheme.cardBackground.opacity(0.9),
+                                            HabitTheme.cardBackground.opacity(0.7)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(.regularMaterial)
+                                )
+                            
+                            // Highlight overlay
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.1),
+                                            Color.clear
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        }
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            HabitTheme.primary.opacity(0.3),
+                                            HabitTheme.accent.opacity(0.2)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1.5
+                                )
+                        )
+                        .shadow(
+                            color: HabitTheme.primary.opacity(0.15),
+                            radius: 15,
+                            x: 0,
+                            y: 8
+                        )
                     )
                     .padding(.horizontal, 20)
                 }
@@ -563,24 +770,70 @@ struct OnboardingProfileCard: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(24)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(HabitTheme.cardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(
-                                isSelected ? 
-                                LinearGradient(colors: profile.gradientColors, startPoint: .leading, endPoint: .trailing) :
-                                LinearGradient(colors: [HabitTheme.inactive.opacity(0.3)], startPoint: .leading, endPoint: .trailing),
-                                lineWidth: isSelected ? 2 : 1
+                ZStack {
+                    // Glass morphism base
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                colors: isSelected ? [
+                                    (profile.gradientColors.first ?? HabitTheme.primary).opacity(0.12),
+                                    (profile.gradientColors.last ?? HabitTheme.accent).opacity(0.08)
+                                ] : [
+                                    HabitTheme.cardBackground.opacity(0.9),
+                                    HabitTheme.cardBackground.opacity(0.7)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             )
-                    )
-                    .shadow(
-                        color: isSelected ? (profile.gradientColors.first?.opacity(0.2) ?? .clear) : .clear,
-                        radius: isSelected ? 8 : 0,
-                        x: 0,
-                        y: isSelected ? 4 : 0
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(isSelected ? .ultraThinMaterial : .regularMaterial)
+                        )
+                    
+                    // Highlight overlay
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(isSelected ? 0.15 : 0.08),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                colors: isSelected ? [
+                                    (profile.gradientColors.first ?? HabitTheme.primary).opacity(0.6),
+                                    (profile.gradientColors.last ?? HabitTheme.accent).opacity(0.4)
+                                ] : [
+                                    HabitTheme.inactive.opacity(0.3),
+                                    HabitTheme.inactive.opacity(0.2)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: isSelected ? 2 : 1.5
+                        )
+                )
+                .shadow(
+                    color: isSelected ? (profile.gradientColors.first?.opacity(0.25) ?? .clear) : Color.black.opacity(0.05),
+                    radius: isSelected ? 15 : 8,
+                    x: 0,
+                    y: isSelected ? 8 : 4
+                )
+                .shadow(
+                    color: isSelected ? (profile.gradientColors.last?.opacity(0.15) ?? .clear) : .clear,
+                    radius: isSelected ? 25 : 0,
+                    x: 0,
+                    y: 0
                     )
             )
         }
@@ -980,8 +1233,8 @@ struct WalkthroughInstructionPanel: View {
 // MARK: - Color Theme
 struct HabitTheme {
     // Primary colors using specific asset names to avoid conflicts
-    static let primary = Color("PrimaryColor")
-    static let secondary = Color("SecondaryColor") 
+    static let primary = Color("AppPrimaryColor")
+    static let secondary = Color("AppSecondaryColor") 
     static let accent = Color("AccentColor")
     
     // Background colors
@@ -995,18 +1248,66 @@ struct HabitTheme {
     static let inactive = Color("InactiveColor")
     static let gold = Color(red: 1.0, green: 0.84, blue: 0.0) // Celebration gold color
     
+    // Enhanced gradient colors for modern UI
+    static let gradientStart = Color("GradientStart")
+    static let gradientEnd = Color("GradientEnd")
+    
     // Semantic colors with dark mode support
     static let primaryText: Color = Color.primary
     static let secondaryText: Color = Color.secondary
     static let tertiaryText: Color = Color(UIColor.tertiaryLabel)
     
+    // Enhanced background colors with better visual hierarchy
     static let unlockedBackground: Color = Color(UIColor.systemBackground)
-    static let lockedBackground: Color = Color(UIColor.secondarySystemBackground)
-    static let completedBackground: Color = Color(UIColor.systemGreen).opacity(0.1)
+    static let lockedBackground: Color = Color(UIColor.secondarySystemBackground).opacity(0.6)
+    static let completedBackground: Color = Color(UIColor.systemGreen).opacity(0.15)
     
-    static let unlockedBorder: Color = Color(UIColor.systemBlue).opacity(0.3)
-    static let lockedBorder: Color = Color(UIColor.separator)
-    static let completedBorder: Color = Color(UIColor.systemGreen).opacity(0.4)
+    static func completedBackgroundGradient() -> LinearGradient {
+        LinearGradient(
+            colors: [Color(UIColor.systemGreen).opacity(0.15), Color(UIColor.systemMint).opacity(0.1)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    // Enhanced border colors with better contrast
+    static let unlockedBorder: Color = Color(UIColor.systemBlue).opacity(0.4)
+    static let lockedBorder: Color = Color(UIColor.separator).opacity(0.8)
+    static let completedBorder: Color = Color(UIColor.systemGreen).opacity(0.6)
+    
+    // Modern shadow colors
+    static let shadowLight: Color = Color.black.opacity(0.08)
+    static let shadowMedium: Color = Color.black.opacity(0.12)
+    static let shadowHeavy: Color = Color.black.opacity(0.16)
+    
+    // Glass morphism effect colors
+    static let glassMorphismBackground: Color = Color.white.opacity(0.1)
+    static let glassMorphismBorder: Color = Color.white.opacity(0.2)
+    
+    // Enhanced state-specific gradients
+    static func completedGradient() -> LinearGradient {
+        LinearGradient(
+            colors: [Color(UIColor.systemGreen), Color(UIColor.systemMint)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    static func primaryGradient() -> LinearGradient {
+        LinearGradient(
+            colors: [primary, accent],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    static func warningGradient() -> LinearGradient {
+        LinearGradient(
+            colors: [warning, Color.orange],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 // MARK: - Modern Text Field Style
@@ -1014,21 +1315,67 @@ struct ModernTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
             .font(.body)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(HabitTheme.cardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(HabitTheme.unlockedBorder.opacity(0.6), lineWidth: 1.5)
-                    )
-                    .shadow(
-                        color: .black.opacity(0.06),
-                        radius: 8,
-                        x: 0,
-                        y: 4
-                    )
+                ZStack {
+                    // Glass morphism base
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    HabitTheme.cardBackground.opacity(0.9),
+                                    HabitTheme.cardBackground.opacity(0.7)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(.regularMaterial)
+                        )
+                    
+                    // Highlight overlay
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.15),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    
+                    // Border gradient
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.3),
+                                    HabitTheme.unlockedBorder.opacity(0.4),
+                                    HabitTheme.unlockedBorder.opacity(0.2)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                }
+                .shadow(
+                    color: Color.black.opacity(0.08),
+                    radius: 10,
+                    x: 0,
+                    y: 5
+                )
+                .shadow(
+                    color: Color.black.opacity(0.04),
+                    radius: 4,
+                    x: 0,
+                    y: 2
+                )
             )
     }
 }
@@ -1039,21 +1386,67 @@ struct ModernLargeTextFieldStyle: TextFieldStyle {
         configuration
             .font(.title2)
             .fontWeight(.semibold)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
             .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(HabitTheme.cardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(HabitTheme.unlockedBorder.opacity(0.6), lineWidth: 2)
-                    )
-                    .shadow(
-                        color: .black.opacity(0.08),
-                        radius: 12,
-                        x: 0,
-                        y: 6
-                    )
+                ZStack {
+                    // Glass morphism base
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    HabitTheme.cardBackground.opacity(0.9),
+                                    HabitTheme.cardBackground.opacity(0.7)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: 22)
+                                .fill(.regularMaterial)
+                        )
+                    
+                    // Highlight overlay
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.2),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    
+                    // Border gradient
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.4),
+                                    HabitTheme.unlockedBorder.opacity(0.5),
+                                    HabitTheme.unlockedBorder.opacity(0.3)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 2
+                        )
+                }
+                .shadow(
+                    color: Color.black.opacity(0.1),
+                    radius: 15,
+                    x: 0,
+                    y: 8
+                )
+                .shadow(
+                    color: Color.black.opacity(0.05),
+                    radius: 6,
+                    x: 0,
+                    y: 3
+                )
             )
     }
 }
@@ -1728,8 +2121,8 @@ struct ContentView: View {
                         .scaleEffect(showingResetAlert ? 0.95 : 1.0)
                         .animation(.easeInOut(duration: 0.1), value: showingResetAlert)
                         
-                        // Footer at bottom of scrollable content
-                        AppFooter()
+                        // Bottom spacing for safe area
+                        Color.clear.frame(height: 20)
                     }
                 }
                 
@@ -2511,13 +2904,99 @@ struct HabitRow: View {
     @State private var unlockScale: CGFloat = 1.0
     @State private var showDescription = false
     
-    private var cardBackgroundColor: Color {
+    private var cardBackgroundColor: AnyView {
         if habit.isUnlocked {
-            return habit.isCompletedToday ? 
-                HabitTheme.completedBackground : 
-                HabitTheme.unlockedBackground
+            if habit.isCompletedToday {
+                return AnyView(
+                    ZStack {
+                        // Glass morphism base
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(UIColor.systemGreen).opacity(0.12),
+                                        Color(UIColor.systemMint).opacity(0.08),
+                                        Color(UIColor.systemTeal).opacity(0.06)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .background(
+                                RoundedRectangle(cornerRadius: 24)
+                                    .fill(.ultraThinMaterial)
+                            )
+                        
+                        // Shimmer overlay for completed habits
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.1),
+                                        Color.clear,
+                                        Color.white.opacity(0.05)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                )
+            } else {
+                return AnyView(
+                    ZStack {
+                        // Glass morphism base
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        HabitTheme.cardBackground.opacity(0.9),
+                                        HabitTheme.cardBackground.opacity(0.7)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .background(
+                                RoundedRectangle(cornerRadius: 24)
+                                    .fill(.regularMaterial)
+                            )
+                        
+                        // Subtle highlight
+                        RoundedRectangle(cornerRadius: 24)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.08),
+                                        Color.clear
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+                )
+            }
         } else {
-            return HabitTheme.lockedBackground
+            return AnyView(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    HabitTheme.lockedBackground.opacity(0.6),
+                                    HabitTheme.lockedBackground.opacity(0.4)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: 24)
+                                .fill(.thickMaterial)
+                        )
+                }
+            )
         }
     }
     
@@ -2774,32 +3253,76 @@ struct HabitRow: View {
                                 .fontWeight(.medium)
                                 .foregroundColor(habit.isCompletedToday ? .green : .blue)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
                         .background(
-                            RoundedRectangle(cornerRadius: 24)
-                                .fill(
-                                    habit.isCompletedToday ? 
-                                    Color.green.opacity(0.12) : 
-                                    Color.blue.opacity(0.12)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .stroke(
-                                            habit.isCompletedToday ? 
-                                            Color.green.opacity(0.4) : 
-                                            Color.blue.opacity(0.4), 
-                                            lineWidth: 1.5
+                            ZStack {
+                                // Glass morphism base
+                                RoundedRectangle(cornerRadius: 28)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: habit.isCompletedToday ? [
+                                                Color(UIColor.systemGreen).opacity(0.15),
+                                                Color(UIColor.systemMint).opacity(0.1)
+                                            ] : [
+                                                Color(UIColor.systemBlue).opacity(0.15),
+                                                Color(UIColor.systemIndigo).opacity(0.1)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
                                         )
-                                )
-                                .shadow(
-                                    color: habit.isCompletedToday ? 
-                                        Color.green.opacity(0.2) : 
-                                        Color.blue.opacity(0.15),
-                                    radius: 6,
-                                    x: 0,
-                                    y: .init(3)
-                                )
+                                    )
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 28)
+                                            .fill(.ultraThinMaterial)
+                                    )
+                                
+                                // Highlight overlay
+                                RoundedRectangle(cornerRadius: 28)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.15),
+                                                Color.clear
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                            }
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 28)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: habit.isCompletedToday ? [
+                                                Color(UIColor.systemGreen).opacity(0.5),
+                                                Color(UIColor.systemMint).opacity(0.3)
+                                            ] : [
+                                                Color(UIColor.systemBlue).opacity(0.5),
+                                                Color(UIColor.systemIndigo).opacity(0.3)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1.5
+                                    )
+                            )
+                            .shadow(
+                                color: habit.isCompletedToday ? 
+                                    Color.green.opacity(0.25) : 
+                                    Color.blue.opacity(0.2),
+                                radius: 8,
+                                x: 0,
+                                y: 4
+                            )
+                            .shadow(
+                                color: habit.isCompletedToday ? 
+                                    Color.green.opacity(0.1) : 
+                                    Color.blue.opacity(0.08),
+                                radius: 16,
+                                x: 0,
+                                y: 0
+                            )
                         )
                     }
                     .disabled(habit.isCompletedToday)
@@ -2821,15 +3344,39 @@ struct HabitRow: View {
                             .fontWeight(.medium)
                             .foregroundColor(HabitTheme.tertiaryText)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
                     .background(
-                        RoundedRectangle(cornerRadius: 24)
-                            .fill(HabitTheme.tertiaryText.opacity(0.05))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 24)
-                                    .stroke(HabitTheme.tertiaryText.opacity(0.2), lineWidth: 1)
-                            )
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 28)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            HabitTheme.tertiaryText.opacity(0.08),
+                                            HabitTheme.tertiaryText.opacity(0.04)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .background(
+                                    RoundedRectangle(cornerRadius: 28)
+                                        .fill(.thickMaterial)
+                                )
+                        }
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28)
+                                .stroke(
+                                    HabitTheme.tertiaryText.opacity(0.25),
+                                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                                )
+                        )
+                        .shadow(
+                            color: Color.black.opacity(0.08),
+                            radius: 4,
+                            x: 0,
+                            y: 2
+                        )
                     )
                 }
             }
@@ -2837,46 +3384,79 @@ struct HabitRow: View {
         .padding(20)
         .background(
             ZStack {
-                // Base card
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(cardBackgroundColor)
+                // Base card with enhanced styling
+                cardBackgroundColor
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(cardBorderColor, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(
+                                LinearGradient(
+                                    colors: habit.isUnlocked ? [
+                                        habit.isCompletedToday ? 
+                                            Color(UIColor.systemGreen).opacity(0.4) : 
+                                            HabitTheme.primary.opacity(0.3),
+                                        habit.isCompletedToday ? 
+                                            Color(UIColor.systemMint).opacity(0.3) : 
+                                            HabitTheme.accent.opacity(0.2)
+                                    ] : [
+                                        HabitTheme.inactive.opacity(0.2),
+                                        HabitTheme.inactive.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: habit.isUnlocked ? 1.5 : 1
+                            )
                     )
                     .shadow(
                         color: shadowColor,
                         radius: shadowRadius,
                         x: 0,
-                        y: habit.isUnlocked ? 6 : 2
+                        y: habit.isUnlocked ? 8 : 3
+                    )
+                    .shadow(
+                        color: habit.isUnlocked ? 
+                            (habit.isCompletedToday ? Color.green.opacity(0.1) : Color.blue.opacity(0.08)) : 
+                            Color.clear,
+                        radius: habit.isUnlocked ? 20 : 0,
+                        x: 0,
+                        y: 0
                     )
                 
                 // Enhanced glow for newly unlocked habits
                 if isNewlyUnlocked {
-                    RoundedRectangle(cornerRadius: 20)
+                    RoundedRectangle(cornerRadius: 24)
                         .stroke(
                             LinearGradient(
                                 colors: [
-                                    Color.yellow.opacity(glowOpacity * 0.8),
-                                    Color.orange.opacity(glowOpacity * 0.5),
-                                    Color.yellow.opacity(glowOpacity * 0.3)
+                                    Color.yellow.opacity(glowOpacity * 0.9),
+                                    Color.orange.opacity(glowOpacity * 0.6),
+                                    Color.pink.opacity(glowOpacity * 0.4)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 3
+                            lineWidth: 2.5
                         )
                         .shadow(
-                            color: Color.yellow.opacity(glowOpacity * 0.6),
-                            radius: 15,
+                            color: Color.yellow.opacity(glowOpacity * 0.7),
+                            radius: 20,
                             x: 0,
                             y: 0
                         )
                         .shadow(
-                            color: Color.orange.opacity(glowOpacity * 0.4),
-                            radius: 25,
+                            color: Color.orange.opacity(glowOpacity * 0.5),
+                            radius: 35,
                             x: 0,
                             y: 0
+                        )
+                }
+                
+                // Locked state dashed border overlay
+                if !habit.isUnlocked {
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(
+                            HabitTheme.inactive.opacity(0.4),
+                            style: StrokeStyle(lineWidth: 1.5, dash: [8, 6])
                         )
                 }
             }
@@ -3062,15 +3642,66 @@ struct CustomHabitLadderView: View {
                                             .textFieldStyle(ModernTextFieldStyle())
                                     }
                                 }
-                                .padding()
+                                .padding(20)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(HabitTheme.cardBackground)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(HabitTheme.inactive.opacity(0.3), lineWidth: 1)
-                                        )
-                                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                                    ZStack {
+                                        // Glass morphism base
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        HabitTheme.cardBackground.opacity(0.8),
+                                                        HabitTheme.cardBackground.opacity(0.6)
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 20)
+                                                    .fill(.regularMaterial)
+                                            )
+                                        
+                                        // Highlight overlay
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.white.opacity(0.15),
+                                                        Color.clear
+                                                    ],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                )
+                                            )
+                                        
+                                        // Border gradient
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.white.opacity(0.3),
+                                                        Color.white.opacity(0.1),
+                                                        HabitTheme.inactive.opacity(0.2)
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 1.5
+                                            )
+                                    }
+                                    .shadow(
+                                        color: Color.black.opacity(0.08),
+                                        radius: 12,
+                                        x: 0,
+                                        y: 6
+                                    )
+                                    .shadow(
+                                        color: Color.black.opacity(0.04),
+                                        radius: 4,
+                                        x: 0,
+                                        y: 2
+                                    )
                                 )
                                 .padding(.horizontal, 20)
                             }
@@ -3085,16 +3716,67 @@ struct CustomHabitLadderView: View {
                                         .fontWeight(.medium)
                                 }
                                 .foregroundColor(.blue)
-                                .padding(.vertical, 16)
-                                .padding(.horizontal, 20)
+                                .padding(.vertical, 18)
+                                .padding(.horizontal, 24)
                                 .frame(maxWidth: .infinity)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(.blue.opacity(0.08))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(.blue.opacity(0.3), lineWidth: 1.5)
-                                        )
+                                    ZStack {
+                                        // Glass morphism base
+                                        RoundedRectangle(cornerRadius: 18)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.blue.opacity(0.12),
+                                                        Color.blue.opacity(0.06)
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 18)
+                                                    .fill(.ultraThinMaterial)
+                                            )
+                                        
+                                        // Highlight overlay
+                                        RoundedRectangle(cornerRadius: 18)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.white.opacity(0.2),
+                                                        Color.clear
+                                                    ],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                )
+                                            )
+                                        
+                                        // Border gradient
+                                        RoundedRectangle(cornerRadius: 18)
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color.blue.opacity(0.4),
+                                                        Color.blue.opacity(0.2)
+                                                    ],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 1.5
+                                            )
+                                    }
+                                    .shadow(
+                                        color: Color.blue.opacity(0.2),
+                                        radius: 8,
+                                        x: 0,
+                                        y: 4
+                                    )
+                                    .shadow(
+                                        color: Color.black.opacity(0.05),
+                                        radius: 4,
+                                        x: 0,
+                                        y: 2
+                                    )
                                 )
                             }
                         }

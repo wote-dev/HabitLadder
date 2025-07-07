@@ -45,6 +45,9 @@ struct SettingsView: View {
                     
                     // About Section
                     aboutSection
+                    
+                    // Footer at bottom
+                    AppFooter()
                 }
                 .padding()
             }
